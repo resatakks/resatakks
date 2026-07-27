@@ -1,35 +1,35 @@
 # Reşat Akkuş
 
-**Full-Stack Product Developer** — React, Next.js, TypeScript, Node.js and PostgreSQL
+**Product Engineer with Frontend Roots** — React, Next.js, TypeScript, Node.js and PostgreSQL
 
-I started in frontend engineering and gradually moved into end-to-end product ownership. Today I build and operate production web products for brands: defining the scope, shaping the UX, shipping frontend and backend features, designing data models, integrating business workflows, measuring results, and improving acquisition through SEO and paid ads.
+I started my career in frontend engineering and grew into end-to-end product ownership by building and operating production products. Today I work across product scope, UX, frontend, backend, relational data, integrations, analytics and the operational workflows behind the interface.
 
 Based in Istanbul, Türkiye. Open to remote and asynchronous product teams.
 
 ## Selected products
 
-- **[Golden Sunset Tour](https://goldensunsettour.com)** — Multilingual booking and operations platform with reservations, payments, customer communication, vouchers/invoices, analytics attribution and internal tools.
-- **[MerrySails](https://merrysails.com)** — Direct-sales product for cruises and private yacht experiences, including booking flows, multilingual content, operational workflows and conversion-focused landing pages.
-- **[Kings World Transfer](https://kingsworldtransfer.com)** — Airport transfer product with reservation flows, route-based experiences, lead tracking, PDFs, email automation, SEO and Google Ads tooling.
-- **Product and operations tools** — Admin panels, PostgreSQL/Prisma systems, Telegram-assisted booking workflows, GA4/Google Ads attribution, SEO monitoring and e-commerce integrations.
+- **[Kings World Transfer](https://kingsworldtransfer.com)** — My first zero-to-one full-stack product: route and distance-based pricing, booking flows, Google Maps services, online payments, PostgreSQL data, transactional email, PDF documents, analytics attribution and operational integrations.
+- **Transfer Panel** — A private multi-role operations product used by real hotels and agencies, covering reservation workflows, permissions, reporting, auditability and Telegram-assisted operations.
+- **[MerrySails](https://merrysails.com) / [Golden Sunset Tour](https://goldensunsettour.com)** — Multilingual booking products with shared operational foundations, direct-sales flows, payments, customer communication, vouchers, invoices and internal tools.
+- **PG Premium & Acil Kaşeniz** — Customer-facing products and operational workflows for automotive services and local commerce, supported by measurable SEO and acquisition work.
 
-Additional private client products span travel, e-commerce, automotive services, restaurants and local business operations.
+Additional products span travel, e-commerce, restaurants and local business operations. Most production source code remains private; the public portfolio focuses on product decisions, architecture and verified outcomes.
 
 ## What I work with
 
 - **Product & frontend:** React, Next.js, TypeScript, Vue, Nuxt, responsive UI, accessibility and conversion-focused UX
 - **Backend & data:** Node.js, REST APIs, PostgreSQL, Prisma, Neon, Supabase, authentication and third-party integrations
-- **Business workflows:** bookings, payments, email, PDF generation, notifications, CRM-style admin tools and automation
-- **Growth engineering:** technical SEO, structured data, international SEO, Google Search Console, GA4, Google Ads, Clarity and DataForSEO
-- **Delivery:** Git, code review, Vercel, CI checks, production debugging and iterative releases
+- **Business workflows:** bookings, payments, email, PDF generation, notifications, role-based admin tools and automation
+- **Growth engineering:** technical SEO, structured data, international SEO, Google Search Console, GA4, GTM, Google Ads and Clarity
+- **Delivery:** Git, pull requests, code review, CI checks, production debugging and iterative releases
 
 ## How I work
 
-I prefer owning the complete loop: understand the business problem, choose a practical solution, ship it, observe real user behavior, and improve it. I use AI tools heavily for research and implementation speed, while personally reviewing architecture, edge cases, copy, testing and production behavior.
+I prefer owning the complete loop: understand the problem, choose a practical solution, ship it, observe real usage and improve the outcome. I use AI as a force multiplier for research, repetitive implementation and cross-project audits while retaining responsibility for architecture, validation, testing and production behavior.
 
 ## Current focus
 
-I am looking to grow further as a product engineer in a high-ownership team building a product used frequently by real users. I am especially interested in browser products, strategy games, analytics-driven product decisions and systems where UX and performance matter.
+I am looking to grow further as a product engineer in a high-ownership team building a product used frequently by real users. I am especially interested in browser-based products, strategy games, analytics-driven product decisions and systems where UX, state and performance matter.
 
 ## Contact
 
