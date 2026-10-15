@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react'
 import type { Game } from './game/engine'
 
-export type Tab = 'koy' | 'ordu' | 'harita' | 'siralama' | 'boy' | 'raporlar'
+export type Tab = 'koy' | 'ordu' | 'harita' | 'siralama' | 'boy' | 'raporlar' | 'mesajlar'
 
 export interface Ctx {
   g: Game
@@ -11,6 +11,7 @@ export interface Ctx {
   openBot: (id: number) => void
   showOnMap: (x: number, y: number) => void
   attack: (id: number) => void
+  message: (id: number) => void
   setTab: (t: Tab) => void
 }
 

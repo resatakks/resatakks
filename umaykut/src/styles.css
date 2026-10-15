@@ -234,3 +234,29 @@ input:focus { outline: 1px solid var(--gold2); }
   .cell { font-size: 13px; }
   .cell small { display: none; }
 }
+
+/* ---------- özel mesajlar ---------- */
+.dm-layout { display: grid; grid-template-columns: minmax(200px, 280px) 1fr; gap: 12px; }
+.dm-list { display: flex; flex-direction: column; gap: 4px; max-height: 70vh; overflow-y: auto; }
+.dm-row { display: flex; align-items: center; gap: 8px; text-align: left; width: 100%; }
+.dm-row.active { border-color: var(--gold); background: #3a2f17; }
+.dm-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.avatar.sm { width: 28px; height: 28px; font-size: 14px; flex-shrink: 0; }
+.dm-thread { display: flex; flex-direction: column; min-height: 420px; max-height: 70vh; }
+.dm-head { display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 8px; }
+.dm-box { gap: 6px; }
+.bubble { align-self: flex-start; max-width: 80%; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px 10px 10px 2px; padding: 5px 9px; }
+.bubble.mine { align-self: flex-end; background: #3a2f17; border-color: var(--gold2); border-radius: 10px 10px 2px 10px; }
+.bubble.typing { color: var(--muted); }
+.seen { align-self: flex-end; font-size: 11px; }
+.invite-box { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; background: #2f2614; border: 1px solid var(--gold2); border-radius: 6px; padding: 8px; margin: 8px 0; }
+.typing { font-style: italic; }
+.dots b { animation: blink 1.2s infinite; font-weight: 700; }
+.dots b:nth-child(2) { animation-delay: .2s; }
+.dots b:nth-child(3) { animation-delay: .4s; }
+@keyframes blink { 0%, 80%, 100% { opacity: .2 } 40% { opacity: 1 } }
+@media (max-width: 720px) {
+  .dm-layout { grid-template-columns: 1fr; }
+  .dm-list { max-height: 30vh; }
+}

@@ -1,10 +1,11 @@
 import { TRIBES } from '../game/data'
 import { allianceOf, dist, rankings } from '../game/engine'
 import { useG } from '../ctx'
-import { fmt } from '../format'
+import { fmt, fmtAgo } from '../format'
 
 export default function BotModal({ id, onClose }: { id: number; onClose: () => void }) {
-  const { g, showOnMap, attack } = useG()
+  const { g, now, showOnMap, attack, message } = useG()
+  const peace = (g.dms.find((t) => t.botId === id)?.peaceUntil ?? 0) > now
   const b = g.bots[id]
   const ally = allianceOf(g, b.allianceId)
   const rank = rankings(g).findIndex((r) => r.id === id) + 1
@@ -20,7 +21,7 @@ export default function BotModal({ id, onClose }: { id: number; onClose: () => v
           <div>
             <h3>{b.name}</h3>
             <span className="muted">
-              {TRIBES[b.tribe].name} · #{rank} · {b.online ? <span className="online">● çevrimiçi</span> : 'çevrimdışı'}
+              {TRIBES[b.tribe].name} · #{rank} · {b.online ? <span className="online">● çevrimiçi</span> : `son görülme ${fmtAgo(b.lastSeen ?? now, now)}`}{peace && ' · 🤝 barış'}
             </span>
           </div>
         </div>
@@ -36,6 +37,7 @@ export default function BotModal({ id, onClose }: { id: number; onClose: () => v
         {lastReport && <p className="muted small">Son istihbarat: {lastReport.lines[1]}</p>}
         <div className="row-btns">
           <button onClick={() => showOnMap(b.x, b.y)}>🗺️ Haritada göster</button>
+          <button onClick={() => message(id)}>✉️ Mesaj yaz</button>
           {!mine && <button className="primary" onClick={() => attack(id)}>⚔️ Sefer düzenle</button>}
         </div>
       </div>

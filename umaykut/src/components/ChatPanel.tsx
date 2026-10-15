@@ -11,11 +11,12 @@ export default function ChatPanel() {
   const box = useRef<HTMLDivElement>(null)
   const msgs = ch === 'feed' ? [] : g.chat[ch].filter((m) => m.time <= now)
   const last = msgs[msgs.length - 1]?.id
+  const typers = ch === 'feed' ? [] : [...new Set(g.pending.filter((m) => m.channel === ch && m.typeAt <= now && m.at > now).map((m) => g.bots[m.from].name))]
 
   useEffect(() => {
     const el = box.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [last, ch])
+  }, [last, ch, typers.length])
 
   const send = () => {
     if (!text.trim() || ch === 'feed') return
@@ -56,6 +57,11 @@ export default function ChatPanel() {
                 <span>{m.text}</span>
               </div>
             ))}
+            {typers.length > 0 && (
+              <div className="typing muted small">
+                {typers.slice(0, 2).join(', ')}{typers.length > 2 ? ` ve ${typers.length - 2} kişi` : ''} yazıyor<span className="dots"><b>.</b><b>.</b><b>.</b></span>
+              </div>
+            )}
           </div>
           <div className="chat-input">
             <input

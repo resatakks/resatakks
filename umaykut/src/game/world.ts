@@ -82,6 +82,7 @@ export function generateWorld(playerName: string, tribe: TribeId, speed: number)
       grudge: 0,
       raidPts: inactive ? rnd(0, 20) : pop * aggr * rnd(0.5, 3),
       defPts: pop * (1 - aggr) * rnd(0.2, 1.5),
+      lastSeen: now - (inactive ? rnd(3, 30) * 86400000 : rnd(0, 20) * 3600000),
     })
   }
 
@@ -125,7 +126,7 @@ export function generateWorld(playerName: string, tribe: TribeId, speed: number)
   buildings.ambar = 1
 
   const g: Game = {
-    version: 1,
+    version: 2,
     speed,
     player: {
       name: playerName,
@@ -153,6 +154,7 @@ export function generateWorld(playerName: string, tribe: TribeId, speed: number)
     feed: [],
     chat: { world: [], alliance: [] },
     pending: [],
+    dms: [],
     application: null,
     worldStart: now - 12 * 24 * 3600 * 1000,
     created: now,
@@ -191,8 +193,16 @@ export function loadGame(): Game | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     if (!raw) return null
-    const g = JSON.parse(raw) as Game
-    return g.version === 1 ? g : null
+    const g = JSON.parse(raw) as Omit<Game, "version"> & { version: number }
+    if (g.version === 1) {
+      // v1 → v2: özel mesajlar, son görülme, yazıyor… zamanı
+      const now = Date.now()
+      g.dms = []
+      for (const b of g.bots) b.lastSeen = b.online ? now : now - 3600000
+      for (const m of g.pending) m.typeAt = m.at - 3000
+      g.version = 2
+    }
+    return g.version === 2 ? (g as Game) : null
   } catch {
     return null
   }

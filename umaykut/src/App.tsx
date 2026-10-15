@@ -13,6 +13,7 @@ import Reports from './components/Reports'
 import ChatPanel from './components/ChatPanel'
 import BotModal from './components/BotModal'
 import WinnerModal from './components/WinnerModal'
+import Messages from './components/Messages'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'koy', label: 'Köy', icon: '⛺' },
@@ -21,6 +22,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'siralama', label: 'Sıralama', icon: '🏆' },
   { id: 'boy', label: 'Boy', icon: '🐺' },
   { id: 'raporlar', label: 'Raporlar', icon: '📜' },
+  { id: 'mesajlar', label: 'Mesajlar', icon: '✉️' },
 ]
 
 function initial(): Game | null {
@@ -36,6 +38,8 @@ export default function App() {
   const [botId, setBotId] = useState<number | null>(null)
   const [mapFocus, setMapFocus] = useState<{ x: number; y: number } | null>(null)
   const [attackTarget, setAttackTarget] = useState<number | null>(null)
+  const [dmTarget, setDmTarget] = useState<number | null>(null)
+  const clearDm = useCallback(() => setDmTarget(null), [])
   const refresh = useCallback(() => setVersion((v) => v + 1), [])
 
   useEffect(() => {
@@ -77,6 +81,11 @@ export default function App() {
         setTab('ordu')
         setBotId(null)
       },
+      message: (id) => {
+        setDmTarget(id)
+        setTab('mesajlar')
+        setBotId(null)
+      },
       setTab,
     }
 
@@ -92,6 +101,7 @@ export default function App() {
     )
   }
 
+  const unreadDm = game.dms.reduce((s, t) => s + t.unread, 0)
   const unread = game.reports.filter((r) => !r.read && r.time <= ctx.now).length
 
   const reset = () => {
@@ -110,6 +120,7 @@ export default function App() {
             <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>
               <span>{t.icon}</span> {t.label}
               {t.id === 'raporlar' && unread > 0 && <b className="badge">{unread}</b>}
+              {t.id === 'mesajlar' && unreadDm > 0 && <b className="badge">{unreadDm}</b>}
               {t.id === 'ordu' && game.incoming.some((i) => i.launch <= ctx.now) && <b className="badge red">!</b>}
             </button>
           ))}
@@ -122,6 +133,7 @@ export default function App() {
             {tab === 'siralama' && <Rankings />}
             {tab === 'boy' && <AllianceView />}
             {tab === 'raporlar' && <Reports />}
+            {tab === 'mesajlar' && <Messages openId={dmTarget} clearOpen={clearDm} />}
           </main>
           <aside className="side">
             <ChatPanel />

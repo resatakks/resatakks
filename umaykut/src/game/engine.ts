@@ -4,6 +4,9 @@ import {
 import {
   ALLIANCE_LINES, DM_PROTECT_END, DM_STRONG, DM_WEAK, GENERIC_REPLIES, REPLIES, WORLD_LINES, pick,
 } from './chatter'
+import {
+  type Thread, botDm, deliverDm, hasPeace, humanize, mentionReply, queueMsg, raidBanter, shuffle, socialTick, supportDm, thread, worldChatter,
+} from './social'
 
 // ---------------- tipler ----------------
 export interface Bot {
@@ -26,6 +29,7 @@ export interface Bot {
   grudge: number
   raidPts: number
   defPts: number
+  lastSeen: number
 }
 
 export interface Alliance {
@@ -71,15 +75,15 @@ export interface Outgoing {
   returning: boolean
   loot: Res
 }
-export interface Incoming { id: number; from: number; power: number; troops: number; launch: number; arrive: number }
+export interface Incoming { id: number; from: number; power: number; troops: number; launch: number; arrive: number; army?: number[] }
 export type ReportKind = 'saldiri' | 'savunma' | 'kesif' | 'mesaj' | 'bilgi'
 export interface Report { id: number; time: number; kind: ReportKind; title: string; lines: string[]; read: boolean; win?: boolean; from?: number }
 export interface ChatMsg { id: number; time: number; from: string; botId?: number; tribe?: TribeId; text: string; me?: boolean; system?: boolean }
 export interface FeedItem { id: number; time: number; icon: string; text: string }
-export interface Pending { at: number; channel: 'world' | 'alliance'; from: number; text: string }
+export interface Pending { at: number; typeAt: number; channel: 'world' | 'alliance' | 'dm'; from: number; text: string; topic?: Thread['topic']; invite?: string | null }
 
 export interface Game {
-  version: 1
+  version: 2
   speed: number
   player: Player
   bots: Bot[]
@@ -90,6 +94,7 @@ export interface Game {
   feed: FeedItem[]
   chat: { world: ChatMsg[]; alliance: ChatMsg[] }
   pending: Pending[]
+  dms: Thread[]
   application: { allianceId: string; at: number } | null
   worldStart: number
   created: number
@@ -220,13 +225,13 @@ export function addFeed(g: Game, time: number, icon: string, text: string) {
   g.feed.unshift({ id: nid(g), time, icon, text })
   if (g.feed.length > 80) g.feed.length = 80
 }
-function addChat(g: Game, channel: 'world' | 'alliance', msg: Omit<ChatMsg, 'id'>) {
+export function addChat(g: Game, channel: 'world' | 'alliance', msg: Omit<ChatMsg, 'id'>) {
   const list = g.chat[channel]
   list.push({ ...msg, id: nid(g) })
   if (list.length > 120) list.splice(0, list.length - 120)
 }
 
-function randomBot(g: Game, filter: (b: Bot) => boolean, tries = 40): Bot | null {
+export function randomBot(g: Game, filter: (b: Bot) => boolean, tries = 40): Bot | null {
   for (let i = 0; i < tries; i++) {
     const b = g.bots[Math.floor(Math.random() * g.bots.length)]
     if (filter(b)) return b
@@ -234,7 +239,7 @@ function randomBot(g: Game, filter: (b: Bot) => boolean, tries = 40): Bot | null
   return null
 }
 
-function fill(g: Game, text: string, bot?: Bot) {
+export function fill(g: Game, text: string, bot?: Bot) {
   const ally = g.alliances[Math.floor(Math.random() * Math.min(12, g.alliances.length))]
   const ally2 = pick(g.alliances)
   const other = randomBot(g, (b) => b !== bot) ?? g.bots[0]
@@ -335,6 +340,12 @@ export function sendMission(g: Game, type: MissionType, target: number, army: nu
   if (!b) return 'Hedef bulunamadı'
   if (b.allianceId && b.allianceId === p.allianceId && type !== 'scout') return 'Kendi boyuna saldıramazsın'
   if (p.protectionUntil > now && type !== 'scout') p.protectionUntil = now // saldırı korumayı bitirir
+  if (type !== 'scout' && hasPeace(g, target, now)) {
+    const th = thread(g, target)
+    th.peaceUntil = 0
+    th.topic = 'traitor'
+    th.mood = -1
+  }
   const t = travelMs(g, army, dist(p.x, p.y, b.x, b.y))
   army.forEach((n, i) => (p.army[i] -= n))
   g.out.push({ id: nid(g), type, target, army: [...army], start: now, arrive: now + t, back: now + 2 * t, returning: false, loot: zeroRes() })
@@ -399,10 +410,11 @@ export function sendChat(g: Game, channel: 'world' | 'alliance', text: string, n
   for (let i = 0; i < nReplies; i++) {
     const bot = pool && pool.length ? pick(pool) : randomBot(g, (b) => b.online) ?? pick(g.bots)
     const lines = matched.length ? matched[i % matched.length].lines : GENERIC_REPLIES
-    let reply = fill(g, pick(lines), bot)
+    let reply = humanize(fill(g, pick(lines), bot), bot)
     if (Math.random() < 0.6) reply = `@${g.player.name} ${reply}`
-    g.pending.push({ at: now + rnd(2500, 9000) * (i + 1), channel, from: bot.id, text: reply })
+    queueMsg(g, { at: now + rnd(2500, 9000) * (i + 1), channel, from: bot.id, text: reply })
   }
+  if (!nReplies || Math.random() < 0.5) mentionReply(g, channel, text, now)
 }
 
 // ---------------- savaş ----------------
@@ -485,9 +497,13 @@ function resolveOutgoing(g: Game, m: Outgoing, now: number) {
   if (b.activity > 0) {
     if (b.aggr > 0.35 && b.atk > att * 0.3) {
       b.grudge = now + rnd(2, 10) * 60000 / g.speed
-      if (Math.random() < 0.6) addReport(g, { time: m.arrive + rnd(20000, 90000), kind: 'mesaj', title: `${b.name} sana mesaj gönderdi`, lines: [fill(g, pick(DM_STRONG), b)], from: b.id })
-    } else if (Math.random() < 0.5) {
-      addReport(g, { time: m.arrive + rnd(20000, 90000), kind: 'mesaj', title: `${b.name} sana mesaj gönderdi`, lines: [fill(g, pick(DM_WEAK), b)], from: b.id })
+      const th = thread(g, b.id)
+      th.mood = Math.max(-1, th.mood - 0.4)
+      if (th.topic === 'traitor') botDm(g, b, pick(['barış yapmıştık! şimdi göreceksin', 'sözünü bozdun, boyuma da söyledim', 'hain! bunu unutmayacağım']), m.arrive + rnd(15000, 60000), 'traitor')
+      else if (Math.random() < 0.7) botDm(g, b, pick(DM_STRONG), m.arrive + rnd(20000, 90000), 'threat')
+    } else if (Math.random() < 0.6) {
+      thread(g, b.id).mood -= 0.2
+      botDm(g, b, pick(DM_WEAK), m.arrive + rnd(20000, 90000), 'peace')
     }
   }
 }
@@ -497,9 +513,15 @@ function launchBotAttack(g: Game, b: Bot, now: number, revenge: boolean) {
   const d = dist(p.x, p.y, b.x, b.y)
   const speed = rnd(3, 7.5)
   const power = b.atk * rnd(0.35, 0.85)
-  if (power < 20) return
+  if (power < 20 || hasPeace(g, b.id, now)) return
   const travel = Math.max(30000, (d / speed) * 60000) / g.speed
-  g.incoming.push({ id: nid(g), from: b.id, power, troops: Math.round(power / rnd(30, 55)), launch: now, arrive: now + travel })
+  // gerçek birlik dağılımı: saldırı gücünü botun boy birimlerine böl
+  const units = UNITS[b.tribe]
+  const w = units.map((u, i) => (i === 0 ? 0.5 : u.atk >= 30 ? 1 + b.atkF : 0.8) * rnd(0.4, 1.6))
+  const ws = w.reduce((s, x) => s + x, 0)
+  const army = units.map((u, i) => Math.max(0, Math.round((power * w[i]) / ws / Math.max(1, u.atk))))
+  g.incoming.push({ id: nid(g), from: b.id, power, troops: army.reduce((s, n) => s + n, 0), launch: now, arrive: now + travel, army })
+  if (revenge && Math.random() < 0.5) botDm(g, b, pick(['ordum yolda 😈', 'hazırlan', 'geliyorum {me}', 'sırada sen varsın']), now + rnd(5000, 30000), 'threat')
   b.atk -= power * 0.3
   if (revenge) b.grudge = 0
 }
@@ -537,6 +559,7 @@ function resolveIncoming(g: Game, inc: Incoming) {
   ]
   addReport(g, { time: inc.arrive, kind: 'savunma', title: `${win ? 'Köyün yağmalandı' : 'Saldırı püskürtüldü'} — ${b.name}`, lines, win: !win, from: b.id })
   if (!win) addFeed(g, inc.arrive, '🛡️', `${p.name}, ${b.name} adlı oyuncunun saldırısını püskürttü`)
+  else supportDm(g, inc.arrive)
 }
 
 // ---------------- Umaykut ----------------
@@ -578,7 +601,7 @@ function simulateBots(g: Game, dtReal: number, now: number, quiet: boolean) {
       b.def += (b.pop * 0.3 - b.def) * Math.min(1, dt / 3600)
     }
     if (Math.random() < toggle) b.online = b.activity > 0 && Math.random() < b.activity * 0.55 * dayFactor
-    if (b.online) online++
+    if (b.online) { online++; b.lastSeen = now }
   }
   g.online = online + 1
 
@@ -629,6 +652,7 @@ function simulateBots(g: Game, dtReal: number, now: number, quiet: boolean) {
           a.res += loot
           a.raidPts += (def * defLoss) / 100
           addFeed(g, now, '🗡️', `${a.name}, ${target.name} adlı oyuncunun köyünü yağmaladı (${fmt(loot)} kaynak)`)
+          raidBanter(g, a, target, now)
         } else {
           target.defPts += (power * attLoss) / 100
           addFeed(g, now, '🛡️', `${target.name}, ${a.name} adlı oyuncunun saldırısını püskürttü`)
@@ -639,15 +663,31 @@ function simulateBots(g: Game, dtReal: number, now: number, quiet: boolean) {
 
   // dünya sohbeti
   if (!quiet && chance(1 / 13, dtReal)) {
-    const b = randomBot(g, (x) => x.online) ?? pick(g.bots)
-    addChat(g, 'world', { time: now, from: b.name, botId: b.id, tribe: b.tribe, text: fill(g, pick(WORLD_LINES), b) })
+    if (!worldChatter(g, now)) {
+      const b = randomBot(g, (x) => x.online) ?? pick(g.bots)
+      addChat(g, 'world', { time: now, from: b.name, botId: b.id, tribe: b.tribe, text: humanize(fill(g, pick(WORLD_LINES), b), b) })
+    }
+  }
+  if (!quiet) socialTick(g, dtReal, now)
+  // boy içi olaylar: bina/Umaykut haberleri
+  if (!quiet && chance(1 / 45, dtReal)) {
+    const b = randomBot(g, (x) => x.online)
+    if (b) addFeed(g, now, pick(['🔨', '🏛️', '🐎']), pick([
+      `${b.name} köyünde Otağ’ı yükseltti`,
+      `${b.name}, ${allianceOf(g, b.allianceId)?.name ?? 'boysuz'} olarak Umaykut’a kaynak bağışladı`,
+      `${b.name} yeni bir ordu topladı`,
+    ]))
+  }
+  if (!quiet && chance(1 / 240, dtReal)) {
+    const b = randomBot(g, (x) => x.activity > 0)
+    if (b) addFeed(g, now, '🆕', `${b.name} dünyaya katıldı (${TRIBES[b.tribe].name})`)
   }
   // boy sohbeti
   if (!quiet && g.player.allianceId && chance(1 / 40, dtReal)) {
     const members = g.bots.filter((x) => x.allianceId === g.player.allianceId && x.activity > 0)
     if (members.length) {
       const b = pick(members)
-      addChat(g, 'alliance', { time: now, from: b.name, botId: b.id, tribe: b.tribe, text: fill(g, pick(ALLIANCE_LINES), b) })
+      addChat(g, 'alliance', { time: now, from: b.name, botId: b.id, tribe: b.tribe, text: humanize(fill(g, pick(ALLIANCE_LINES), b), b) })
     }
   }
   // kendi boyuna katılım
@@ -658,7 +698,7 @@ function simulateBots(g: Game, dtReal: number, now: number, quiet: boolean) {
     if (b) {
       b.allianceId = own.id
       addChat(g, 'alliance', { time: now, from: 'Sistem', system: true, text: `${b.name} (${TRIBES[b.tribe].name}) boyunuza katıldı.` })
-      if (!quiet) g.pending.push({ at: now + 4000, channel: 'alliance', from: b.id, text: pick(['selam boy', 'herkese selam, birlikte büyüyelim', 'merhaba, hangi koordinattasınız?']) })
+      if (!quiet) queueMsg(g, { at: now + 4000, channel: 'alliance', from: b.id, text: pick(['selam boy', 'herkese selam, birlikte büyüyelim', 'merhaba, hangi koordinattasınız?']) })
     }
   }
 
@@ -768,10 +808,11 @@ function step(g: Game, t0: number, t1: number, quiet: boolean) {
         g.chat.alliance = []
         addReport(g, { time: t1, kind: 'bilgi', title: `${a.name} boyuna kabul edildin!`, lines: ['Boy sohbetinden üyelerle konuşabilir, Umaykut’a kaynak bağışlayabilirsin.'] })
         addChat(g, 'alliance', { time: t1, from: 'Sistem', system: true, text: `${p.name} boya katıldı.` })
-        const members = g.bots.filter((b) => b.allianceId === a.id && b.activity > 0)
+        const members = shuffle(g.bots.filter((b) => b.allianceId === a.id && b.activity > 0))
+        const lines = shuffle(['hoş geldin {me}! 🐺', 'aramıza hoş geldin', 'hoş geldin kardeş, koordinatın ne?', 'hg {me}', 'selam, Umaykut’a katkı bekliyoruz :)'])
         for (let i = 0; i < Math.min(3, members.length); i++) {
-          const b = pick(members)
-          g.pending.push({ at: t1 + rnd(2000, 15000) * (i + 1), channel: 'alliance', from: b.id, text: fill(g, pick(['hoş geldin {me}! 🐺', 'aramıza hoş geldin', 'hoş geldin kardeş, koordinatın ne?', 'hg {me}', 'selam, Umaykut’a katkı bekliyoruz :)']), b) })
+          const b = members[i]
+          queueMsg(g, { at: t1 + rnd(2000, 15000) * (i + 1), channel: 'alliance', from: b.id, text: humanize(fill(g, lines[i], b), b) })
         }
       } else {
         addReport(g, { time: t1, kind: 'mesaj', title: `${a.name} başvurunu reddetti`, lines: [`Boy beyi: “Kardeşim en az ${a.minPop} nüfusa ulaşınca tekrar başvur.”`] })
@@ -785,7 +826,9 @@ function step(g: Game, t0: number, t1: number, quiet: boolean) {
     g.pending = g.pending.filter((m) => m.at > t1)
     for (const m of due) {
       const b = g.bots[m.from]
+      if (m.channel === 'dm') { deliverDm(g, m); continue }
       if (m.channel === 'alliance' && !g.player.allianceId) continue
+      b.lastSeen = m.at
       addChat(g, m.channel, { time: m.at, from: b.name, botId: b.id, tribe: b.tribe, text: m.text })
     }
   }

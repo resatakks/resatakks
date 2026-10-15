@@ -80,7 +80,7 @@ export default function Army({ target, clearTarget }: { target: number | null; c
             return (
               <div key={i.id} className="move-row">
                 <span>
-                  <button className="link" onClick={() => openBot(b.id)}>{b.name}</button> ({b.x}|{b.y}) · ~{fmt(i.troops)} asker
+                  <button className="link" onClick={() => openBot(b.id)}>{b.name}</button> ({b.x}|{b.y}) · {i.army ? UNITS[b.tribe].map((u, k) => (i.army![k] ? `${u.icon}${fmt(i.army![k] * (0.8 + ((i.id * 7 + k) % 5) / 10))}` : '')).filter(Boolean).join(' ') + ' (tahmini)' : `~${fmt(i.troops)} asker`}
                 </span>
                 <span className="mono red">{fmtDur(i.arrive - now)}</span>
               </div>
