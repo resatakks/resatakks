@@ -34,7 +34,7 @@ function makeName(used: Set<string>) {
 }
 
 function cityName(owner: string, i: number) {
-  if (i === 0) return Math.random() < 0.35 ? 'merkez' : Math.random() < 0.5 ? owner.slice(0, 10) : pick(CITY_NAMES)
+  if (i === 0) return Math.random() < 0.12 ? 'merkez' : Math.random() < 0.45 ? owner.slice(0, 10) : pick(CITY_NAMES)
   return Math.random() < 0.4 ? `${owner.slice(0, 8)}${i + 1}` : pick(CITY_NAMES)
 }
 

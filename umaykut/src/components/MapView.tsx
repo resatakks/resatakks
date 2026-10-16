@@ -61,8 +61,7 @@ export default function MapView({ focus, onHover }: { focus: { x: number; y: num
         let tag: string | null = null
         let mine = false
         if ('city' in o) {
-          const c = g.player.cities.find((c) => c.id === o.city)!
-          name = c.name
+          name = g.player.name
           mine = true
           shield = '#3fd06b'
           tag = allianceOf(g, g.player.allianceId)?.tag ?? null
@@ -70,7 +69,7 @@ export default function MapView({ focus, onHover }: { focus: { x: number; y: num
         } else {
           const b = g.bots[o.bot]
           const a = allianceOf(g, b.allianceId)
-          name = b.cities[o.ci].name
+          name = b.name
           size2 = b.pop > 900 ? 3 : b.pop > 220 ? 2 : 1
           if (o.ci > 0) size2 = Math.max(1, size2 - 1)
           shield = a ? (a.id === g.player.allianceId ? '#4fb3ff' : a.color) : '#8a8a8a'

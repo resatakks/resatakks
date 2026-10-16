@@ -34,6 +34,7 @@ export interface Bot {
   raidPts: number
   defPts: number
   lastSeen: number
+  nextRaid?: number // oyuncuya tekrar saldırabileceği an
 }
 
 export interface Alliance {
@@ -70,6 +71,7 @@ export interface Player {
   allianceId: string | null
   protectionUntil: number
   protectionNotified: boolean
+  hits?: number[] // oyuncuya gönderilen bot saldırılarının çıkış zamanları
   raidPts: number
   defPts: number
   starveAcc: number
@@ -789,7 +791,22 @@ function nearestCity(g: Game, x: number, y: number) {
   return best
 }
 
+// oyuncuya saldırı tavanı: 24 oyun saatinde en fazla 5, iki saldırı arası en az 40 oyun dakikası
+const HIT_WINDOW = 24 * 3600 * 1000
+const HIT_CAP = 5
+const HIT_GAP = 40 * 60000
+
+function canHit(g: Game, b: Bot, now: number) {
+  const p = g.player
+  if (b.nextRaid && now < b.nextRaid) return false
+  const hits = (p.hits ?? []).filter((t) => now - t < HIT_WINDOW / g.speed)
+  p.hits = hits
+  if (hits.length >= HIT_CAP) return false
+  return !hits.length || now - hits[hits.length - 1] >= HIT_GAP / g.speed
+}
+
 function launchBotAttack(g: Game, b: Bot, now: number, revenge: boolean) {
+  if (!canHit(g, b, now)) return
   const target = nearestCity(g, b.x, b.y)
   const d = dist(target.x, target.y, b.x, b.y)
   const speed = rnd(3, 7.5)
@@ -798,6 +815,8 @@ function launchBotAttack(g: Game, b: Bot, now: number, revenge: boolean) {
   const travel = Math.max(30000, (d / speed) * 60000) / g.speed
   const army = botArmy(b, power, 'atk', power > 3000 && Math.random() < 0.5)
   g.incoming.push({ id: nid(g), from: b.id, fc: 0, cityId: target.id, power, army, launch: now, arrive: now + travel })
+  g.player.hits = [...(g.player.hits ?? []), now]
+  b.nextRaid = now + (rnd(8, 20) * 3600 * 1000) / g.speed
   if (revenge && Math.random() < 0.5) botDm(g, b, pick(['ordum yolda 😈', 'hazırlan', 'geliyorum {me}', 'sırada sen varsın']), now + rnd(5000, 30000), 'threat')
   b.atk -= power * 0.3
   if (revenge) b.grudge = 0
@@ -1025,10 +1044,10 @@ function simulateBots(g: Game, dtReal: number, now: number, quiet: boolean) {
       }
     }
     const pp = playerPop(p)
-    if (g.incoming.length < 3 && chance(1 / 1500, dt)) {
+    if (g.incoming.length < 2 && chance(1 / 3600, dt)) {
       const b = randomBot(
         g,
-        (x) => x.activity > 0 && x.aggr > 0.45 && x.allianceId !== p.allianceId && x.pop < pp * 2.5 + 25 && dist(x.x, x.y, p.x, p.y) < 28,
+        (x) => x.activity > 0 && x.aggr > 0.45 && x.allianceId !== p.allianceId && x.pop > pp * 0.5 && x.pop < pp * 2 + 25 && dist(x.x, x.y, p.x, p.y) < 28,
         120,
       )
       if (b) launchBotAttack(g, b, now, false)
