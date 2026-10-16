@@ -4,24 +4,24 @@ import { allianceOf } from '../game/engine'
 import { acceptInvite, playerDm, thread } from '../game/social'
 import { useG } from '../ctx'
 import { fmtAgo, fmtClock } from '../format'
+import { Window } from './ui'
 
 const TOPIC_LABEL: Record<string, string> = {
-  invite: '🐺 Boy daveti', peace: '🤝 Barış', threat: '⚔️ Tehdit', beg: '🙏 Rica', greet: '👋', support: '🛡️ Boy', chat: '', traitor: '💢 Hain',
+  invite: '🐺 Birlik daveti', peace: '🤝 Barış', threat: '⚔️ Tehdit', beg: '🙏 Rica', greet: '👋', support: '🛡️ Birlik', chat: '', traitor: '💢 Hain',
 }
 
-export default function Messages({ openId, clearOpen }: { openId: number | null; clearOpen: () => void }) {
-  const { g, now, act, openBot } = useG()
+export default function Messages({ openId }: { openId?: number }) {
+  const { g, now, act, open } = useG()
   const [sel, setSel] = useState<number | null>(openId ?? g.dms[0]?.botId ?? null)
   const [text, setText] = useState('')
   const box = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (openId !== null) {
+    if (openId !== undefined) {
       act((g) => void thread(g, openId))
       setSel(openId)
-      clearOpen()
     }
-  }, [openId, clearOpen])
+  }, [openId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const t = sel !== null ? g.dms.find((x) => x.botId === sel) : undefined
   const b = sel !== null ? g.bots[sel] : null
@@ -30,7 +30,7 @@ export default function Messages({ openId, clearOpen }: { openId: number | null;
   const seen = t && lastMine && t.seenAt && t.seenAt <= now && !t.msgs.some((m) => !m.me && m.time > lastMine.time)
 
   useEffect(() => {
-    if (t && t.unread) act(() => (t.unread = 0))
+    if (t && t.unread) act(() => { t.unread = 0 })
     const el = box.current
     if (el) el.scrollTop = el.scrollHeight
   }, [sel, t?.msgs.length, typing]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -48,6 +48,7 @@ export default function Messages({ openId, clearOpen }: { openId: number | null;
   const invite = t?.invite ? allianceOf(g, t.invite) : null
 
   return (
+    <Window title="Mesajlar" wide>
     <div className="dm-layout">
       <section className="panel dm-list">
         <h3>✉️ Mesajlar</h3>
@@ -73,7 +74,7 @@ export default function Messages({ openId, clearOpen }: { openId: number | null;
         ) : (
           <>
             <div className="dm-head">
-              <button className="link name" style={{ color: TRIBES[b.tribe].color }} onClick={() => openBot(b.id)}>{b.name}</button>
+              <button className="link name" style={{ color: TRIBES[b.tribe].color }} onClick={() => open({ w: 'oyuncu', id: b.id })}>{b.name}</button>
               <small className="muted">
                 {b.online ? <span className="online">● çevrimiçi</span> : `son görülme ${fmtAgo(b.lastSeen ?? now, now)}`}
                 {t.peaceUntil > now && ' · 🤝 barış var'}
@@ -91,8 +92,8 @@ export default function Messages({ openId, clearOpen }: { openId: number | null;
             </div>
             {invite && !g.player.allianceId && (
               <div className="invite-box">
-                <span>🐺 <b>[{invite.tag}] {invite.name}</b> seni boya davet ediyor.</span>
-                <button className="primary" onClick={() => act((g, n) => acceptInvite(g, b.id, n))}>Daveti kabul et</button>
+                <span>🐺 <b>[{invite.tag}] {invite.name}</b> seni birliğe davet ediyor.</span>
+                <button className="btn-gold" onClick={() => act((g, n) => acceptInvite(g, b.id, n))}>Daveti kabul et</button>
               </div>
             )}
             <div className="chat-input">
@@ -103,11 +104,12 @@ export default function Messages({ openId, clearOpen }: { openId: number | null;
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && send()}
               />
-              <button className="primary" onClick={send}>Gönder</button>
+              <button className="btn-gold" onClick={send}>Gönder</button>
             </div>
           </>
         )}
       </section>
     </div>
+    </Window>
   )
 }

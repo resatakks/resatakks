@@ -6,16 +6,19 @@ export default function WinnerModal({ onReset }: { onReset: () => void }) {
   const a = allianceOf(g, g.winner)
   const won = g.winner === g.player.allianceId
   return (
-    <div className="modal-bg">
-      <div className="modal panel winner">
-        <div className="big-emoji">{won ? '👑' : '🏛️'}</div>
-        <h2>{won ? 'Zafer! Umaykut senin boyunla yükseldi!' : `${a?.name ?? 'Bir boy'} Umaykut’u tamamladı`}</h2>
-        <p>
-          {won
-            ? 'Hun, Göktürk ve Selçuklu boyları tek bayrak altında birleşti. Adın bozkırda destan olarak anılacak.'
-            : 'Türk halklarını birleştiren başka bir boy oldu. Bu dünya sona erdi; yeni bir dünyada intikam alabilirsin.'}
-        </p>
-        <button className="primary big" onClick={onReset}>Yeni dünyaya başla</button>
+    <div className="win-bg">
+      <div className="win winner">
+        <div className="win-title"><span>Sezon sona erdi</span></div>
+        <div className="win-body">
+          <div className="big-emoji">{won ? '👑' : '🏛️'}</div>
+          <h3>{won ? 'Zafer! Umaykut senin birliğinle yükseldi!' : `${a?.name ?? 'Bir birlik'} Umaykut’u tamamladı`}</h3>
+          <p>
+            {won
+              ? 'Hun, Göktürk ve Selçuklu tek bayrak altında birleşti. Adın bozkırda destan olarak anılacak.'
+              : 'Türk devletlerini birleştiren başka bir birlik oldu. Bu dünya sona erdi; yeni bir dünyada intikam alabilirsin.'}
+          </p>
+          <button className="btn-gold big" onClick={onReset}>Yeni dünyaya başla</button>
+        </div>
       </div>
     </div>
   )

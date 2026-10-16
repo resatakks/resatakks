@@ -96,7 +96,7 @@ const YES = /\b(evet|olur|tamam|ok|okey|kabul|anlaştık|tm|tmm|peki|neden olmas
 const NO = /\b(hayır|yok|olmaz|istemem|gerek yok|sanane|boşver)\b/i
 const PEACE = /(barış|anlaş|dokunma|saldırma|özür|pardon|kusura|affet|dost|kardeş)/i
 const THREAT = /(gel|vururum|yok ederim|ezerim|korkmuyorum|bekle sen|göreceksin|haddini|aptal|salak|gerizekalı|mal\b|ağla)/i
-const RES_ASK = /(kaynak|demir|odun|taş|yiyecek|takas|ver)/i
+const RES_ASK = /(kaynak|demir|odun|taş|tahıl|takas|ver)/i
 const WHO = /(kimsin|kim bu|nerelisin|kaç yaşındasın|nerden|nereden)/i
 const HELLO = /\b(selam|merhaba|slm|sa|naber|nbr|hey|selamün)\b/i
 
@@ -119,7 +119,7 @@ export function playerDm(g: Game, botId: number, text: string, now: number) {
   }
   if (t.topic === 'invite' && NO.test(text)) {
     t.invite = null
-    return botDm(g, b, pick(['peki, fikrin değişirse yaz', 'sen bilirsin, boysuz zor ama', 'tamam kardeş bol şans']), at, 'chat')
+    return botDm(g, b, pick(['peki, fikrin değişirse yaz', 'sen bilirsin, birliksiz zor ama', 'tamam kardeş bol şans']), at, 'chat')
   }
   if (t.topic === 'traitor') {
     t.mood = Math.max(-1, t.mood - 0.2)
@@ -144,10 +144,10 @@ export function playerDm(g: Game, botId: number, text: string, now: number) {
     return botDm(g, b, pick(['barış mı? önce kaybımı öde', 'yok kardeş, intikam alacağım', 'çok geç', 'sana güvenmiyorum']), at, 'threat')
   }
   if (RES_ASK.test(text)) {
-    return botDm(g, b, pick(['benim de az, kusura bakma', 'takas sistemi yok ki bu oyunda :D', 'inaktiflere yağma at, kaynak orda', 'ambarım boş valla']), at, t.topic)
+    return botDm(g, b, pick(['benim de az, kusura bakma', 'pazardan takas yap, altın sat', 'inaktiflere yağma at, kaynak orda', 'ambarım boş valla']), at, t.topic)
   }
   if (WHO.test(text)) {
-    return botDm(g, b, pick([`ben ${b.x}|${b.y} deyim, ${TRIBES[b.tribe].name.toLowerCase()} oynuyorum`, `${allyName ? allyName + ' boyundanım' : 'boysuzum şimdilik'}`, 'eski oyuncuyum, facebook zamanından beri', 'izmirden yazıyorum', 'öğrenciyim, boş vakitlerde oynuyorum']), at, 'chat')
+    return botDm(g, b, pick([`ben ${b.x}|${b.y} deyim, ${TRIBES[b.tribe].name.toLowerCase()} oynuyorum`, `${allyName ? allyName + ' birliğindenim' : 'birliksizim şimdilik'}`, 'eski oyuncuyum, facebook zamanından beri', 'izmirden yazıyorum', 'öğrenciyim, boş vakitlerde oynuyorum']), at, 'chat')
   }
   if (HELLO.test(text)) {
     return botDm(g, b, pick(['as', 'aleyküm selam', 'selam {me}, hayırdır?', 'selam kardeş', 'iyidir sen?']), at, t.topic === 'chat' ? 'greet' : t.topic)
@@ -165,8 +165,8 @@ export function acceptInvite(g: Game, botId: number, now: number) {
   g.player.allianceId = a.id
   g.application = null
   g.chat.alliance = []
-  addChat(g, 'alliance', { time: now, from: 'Sistem', system: true, text: `${g.player.name} boya katıldı (${g.bots[botId].name} davet etti).` })
-  addFeed(g, now, '🐺', `${g.player.name}, ${a.name} boyuna katıldı`)
+  addChat(g, 'alliance', { time: now, from: 'Sistem', system: true, text: `${g.player.name} birliğe katıldı (${g.bots[botId].name} davet etti).` })
+  addFeed(g, now, '🐺', `${g.player.name}, ${a.name} birliğine katıldı`)
   t.topic = 'chat'
   const members = shuffle(g.bots.filter((b) => b.allianceId === a.id && b.activity > 0 && b.online && b.id !== botId))
   const lines = shuffle(['hoş geldin {me}! 🐺', 'hg', 'aramıza hoş geldin', 'hoş geldin kardeş, koordinatın ne?', 'hg kardeş, Umaykut’a katkı bekliyoruz :)'])
@@ -180,12 +180,12 @@ export function acceptInvite(g: Game, botId: number, now: number) {
 // ---------------- dünya sohbetinde zincirler ----------------
 const QA: [string, string[]][] = [
   ['mızrakçı mı okçu mu savunmada daha iyi', ['mızrakçı tabi', 'okçu daha dengeli bence', 'ikisinden de bas', 'atlıya karşı mızrakçı']],
-  ['Umaykut kimin olacak sizce?', ['{ally} kesin', 'bizim boy 😎', 'daha çok erken', '{ally2} çok hızlı gidiyor']],
-  ['yeni başladım ne yapmam lazım', ['kaynak binalarını yükselt önce', 'bir boya katıl', 'acemi koruman bitmeden sur yap', 'hoş geldin, tarla kas']],
+  ['Umaykut kimin olacak sizce?', ['{ally} kesin', 'bizim birlik 😎', 'daha çok erken', '{ally2} çok hızlı gidiyor']],
+  ['yeni başladım ne yapmam lazım', ['kaynak binalarını yükselt önce', 'bir birliğe katıl', 'acemi koruman bitmeden sur yap', 'hoş geldin, tarla kas']],
   ['hunlar mı göktürkler mi?', ['hunlar, atlı okçu çok iyi', 'göktürk uzun vadede kazandırır', 'selçuklu diyen yok mu :(']],
   ['sunucunun en büyüğü kim şu an', ['{name} galiba', 'sıralamaya bak', '{name} çok büyüdü']],
   ['kimse yok mu', ['burdayım', 'var var', 'gece herkes uyuyor', 'buradayız']],
-  ['demir lazım takas yapan?', ['takas yok bu oyunda', 'inaktif yağmala', 'bende de yok']],
+  ['demir lazım takas yapan?', ['pazar kur, orda takas var', 'inaktif yağmala', 'bende de yok']],
   ['kurultay kaçta?', ['9da', 'akşam', 'bilmiyorum bizimkinde yok']],
   ['oyun kasıyor mu bende mi', ['bende de biraz', 'bende yok', 'sayfayı yenile']],
 ]
@@ -242,25 +242,25 @@ export function mentionReply(g: Game, channel: 'world' | 'alliance', text: strin
 
 // ---------------- botların kendiliğinden attığı özel mesajlar ----------------
 const INVITE_LINES = [
-  'selam {me}, haritada gördüm seni. {ally} boyuna gelmek ister misin?',
-  'kardeş yeni misin? boyumuz üye arıyor, istersen davet ediyorum',
+  'selam {me}, haritada gördüm seni. {ally} birliğine gelmek ister misin?',
+  'kardeş yeni misin? birliğimiz üye arıyor, istersen davet ediyorum',
   'selam! {ally} olarak yakındaki aktif oyuncuları topluyoruz. katılır mısın?',
-  'boysuz kalma, bizim boy birbirini korur. davet atıyorum',
+  'birliksiz kalma, bizim birlik birbirini korur. davet atıyorum',
 ]
 const NEIGHBOR_LINES = [
   'selam komşu, ben {bx}|{by} deyim. birbirimize dokunmayalım mı?',
   'komşu selam, barış yapalım mı? ikimiz de büyürüz',
   'yakınız seninle, kavga etmeyelim bence ne dersin',
 ]
-const BEG_LINES = ['kardeş biraz kaynak verebilir misin? çok geride kaldım', 'bana saldırma lütfen yeni başladım', 'boyuna alır mısın beni?']
-const SUPPORT_LINES = ['saldırı yedin gördüm, iyi misin? sur yükselt', 'kim vurdu sana? boyca karşılık verelim', 'destek lazımsa söyle']
+const BEG_LINES = ['kardeş biraz kaynak verebilir misin? çok geride kaldım', 'bana saldırma lütfen yeni başladım', 'birliğine alır mısın beni?']
+const SUPPORT_LINES = ['saldırı yedin gördüm, iyi misin? sur yükselt', 'kim vurdu sana? birlikçe karşılık verelim', 'destek lazımsa söyle']
 
 export function socialTick(g: Game, dtReal: number, now: number) {
   const p = g.player
   const age = now - g.created
   const near = (r: number) => (x: Bot) => x.activity > 0 && dist(x.x, x.y, p.x, p.y) < r && !g.dms.some((t) => t.botId === x.id)
 
-  // ilk dakikalarda bir boy beyi davet atar, sonra seyrek
+  // ilk dakikalarda bir birlik beyi davet atar, sonra seyrek
   if (!p.allianceId && !g.dms.some((t) => t.invite) && chance(age < 8 * 60000 ? 1 / 150 : 1 / 2400, dtReal)) {
     const b = randomBot(g, (x) => near(45)(x) && !!x.allianceId && x.online && (allianceOf(g, x.allianceId)?.minPop ?? 0) < playerPop(p) + 120, 200)
     if (b) botDm(g, b, pick(INVITE_LINES), now + rnd(2000, 8000), 'invite', b.allianceId)

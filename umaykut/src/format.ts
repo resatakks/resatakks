@@ -20,3 +20,11 @@ export function fmtAgo(t: number, now: number) {
   if (s < 86400) return `${Math.floor(s / 3600)} sa önce`
   return `${Math.floor(s / 86400)} gün önce`
 }
+
+export function fmtTime(t: number) {
+  return new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+export function fmtDate(t: number) {
+  return new Date(t).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}

@@ -4,9 +4,10 @@ import { sendChat } from '../game/engine'
 import { useG } from '../ctx'
 import { fmtAgo, fmtClock } from '../format'
 
-export default function ChatPanel() {
-  const { g, now, act, openBot } = useG()
-  const [ch, setCh] = useState<'world' | 'alliance' | 'feed'>('world')
+export type Channel = 'world' | 'alliance' | 'feed'
+
+export default function ChatPanel({ ch, setCh, onClose }: { ch: Channel; setCh: (c: Channel) => void; onClose: () => void }) {
+  const { g, now, act, open } = useG()
   const [text, setText] = useState('')
   const box = useRef<HTMLDivElement>(null)
   const msgs = ch === 'feed' ? [] : g.chat[ch].filter((m) => m.time <= now)
@@ -25,10 +26,11 @@ export default function ChatPanel() {
   }
 
   return (
-    <div className="chat panel">
+    <div className="chat-drawer panel">
+      <button className="win-x" onClick={onClose} aria-label="Kapat">✕</button>
       <div className="seg">
         <button className={ch === 'world' ? 'active' : ''} onClick={() => setCh('world')}>🌍 Dünya</button>
-        <button className={ch === 'alliance' ? 'active' : ''} onClick={() => setCh('alliance')} disabled={!g.player.allianceId}>🐺 Boy</button>
+        <button className={ch === 'alliance' ? 'active' : ''} onClick={() => setCh('alliance')} disabled={!g.player.allianceId}>🐺 Birlik</button>
         <button className={ch === 'feed' ? 'active' : ''} onClick={() => setCh('feed')}>📯 Olaylar</button>
       </div>
       {ch === 'feed' ? (
@@ -49,7 +51,7 @@ export default function ChatPanel() {
                   <button
                     className="link name"
                     style={{ color: m.tribe ? TRIBES[m.tribe].color : undefined }}
-                    onClick={() => m.botId !== undefined && openBot(m.botId)}
+                    onClick={() => m.botId !== undefined && open({ w: 'oyuncu', id: m.botId })}
                   >
                     {m.from}:
                   </button>
@@ -67,11 +69,11 @@ export default function ChatPanel() {
             <input
               value={text}
               maxLength={200}
-              placeholder={ch === 'world' ? 'Dünyaya yaz…' : 'Boyuna yaz…'}
+              placeholder={ch === 'world' ? 'Dünyaya yaz…' : 'Birliğine yaz…'}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && send()}
             />
-            <button className="primary" onClick={send}>Gönder</button>
+            <button className="btn-gold" onClick={send}>Gönder</button>
           </div>
         </>
       )}

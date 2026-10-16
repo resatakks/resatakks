@@ -1,29 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Game, tick } from './game/engine'
+import { type Game, tick } from './game/engine'
 import { clearSave, loadGame, saveGame } from './game/world'
-import { GameCtx, Tab, type Ctx } from './ctx'
+import { GameCtx, type Ctx, type View, type WinState } from './ctx'
 import Setup from './components/Setup'
-import TopBar from './components/TopBar'
-import Village from './components/Village'
-import Army from './components/Army'
 import MapView from './components/MapView'
+import CityView from './components/CityView'
+import BuildingWin from './components/BuildingWin'
 import Rankings from './components/Rankings'
 import AllianceView from './components/AllianceView'
 import Reports from './components/Reports'
-import ChatPanel from './components/ChatPanel'
-import BotModal from './components/BotModal'
+import ChatPanel, { type Channel } from './components/ChatPanel'
 import WinnerModal from './components/WinnerModal'
 import Messages from './components/Messages'
-
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'koy', label: 'Köy', icon: '⛺' },
-  { id: 'ordu', label: 'Ordu', icon: '⚔️' },
-  { id: 'harita', label: 'Harita', icon: '🗺️' },
-  { id: 'siralama', label: 'Sıralama', icon: '🏆' },
-  { id: 'boy', label: 'Boy', icon: '🐺' },
-  { id: 'raporlar', label: 'Raporlar', icon: '📜' },
-  { id: 'mesajlar', label: 'Mesajlar', icon: '✉️' },
-]
+import { Hud, Sidebar } from './components/Frame'
+import { ElmasWin, HelpWin, MiniMap, Movements, PlayerWin, SearchWin, SendWin, SettingsWin } from './components/Windows'
 
 function initial(): Game | null {
   const g = loadGame()
@@ -31,15 +21,35 @@ function initial(): Game | null {
   return g
 }
 
+function WinSwitch({ w }: { w: WinState }) {
+  switch (w.w) {
+    case 'bina': return <BuildingWin key={w.b} id={w.b} />
+    case 'rapor': return <Reports id={w.id} />
+    case 'siralama': return <Rankings />
+    case 'birlik': return <AllianceView />
+    case 'mesaj': return <Messages key={w.id} openId={w.id} />
+    case 'hareket': return <Movements key={w.tab} tab={w.tab} />
+    case 'sefer': return <SendWin key={`${w.bot}-${w.ci}`} bot={w.bot} ci={w.ci} type={w.type} />
+    case 'oyuncu': return <PlayerWin key={w.id} id={w.id} />
+    case 'yardim': return <HelpWin />
+    case 'ayar': return <SettingsWin />
+    case 'ara': return <SearchWin />
+    case 'mini': return <MiniMap />
+    case 'elmas': return <ElmasWin />
+  }
+}
+
 export default function App() {
   const [game, setGame] = useState<Game | null>(initial)
   const [, setVersion] = useState(0)
-  const [tab, setTab] = useState<Tab>('koy')
-  const [botId, setBotId] = useState<number | null>(null)
-  const [mapFocus, setMapFocus] = useState<{ x: number; y: number } | null>(null)
-  const [attackTarget, setAttackTarget] = useState<number | null>(null)
-  const [dmTarget, setDmTarget] = useState<number | null>(null)
-  const clearDm = useCallback(() => setDmTarget(null), [])
+  const [view, setView] = useState<View>('sehir')
+  const [cityId, setCity] = useState(() => game?.player.cities[0].id ?? 1)
+  const [win, setWin] = useState<WinState | null>(null)
+  const [notes, setNotes] = useState<string[]>([])
+  const [focus, setFocus] = useState(() => ({ x: game?.player.x ?? 0, y: game?.player.y ?? 0, n: 0 }))
+  const [chat, setChat] = useState<Channel | null>(null)
+  const [side, setSide] = useState(false)
+  const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
   const refresh = useCallback(() => setVersion((v) => v + 1), [])
 
   useEffect(() => {
@@ -60,86 +70,89 @@ export default function App() {
     }
   }, [game, refresh])
 
-  const ctx: Ctx | null = game && {
-      g: game,
-      now: Date.now(),
-      act: (fn) => {
-        const now = Date.now()
-        tick(game, now)
-        fn(game, now)
-        saveGame(game)
-        refresh()
-      },
-      openBot: (id) => setBotId(id),
-      showOnMap: (x, y) => {
-        setMapFocus({ x, y })
-        setTab('harita')
-        setBotId(null)
-      },
-      attack: (id) => {
-        setAttackTarget(id)
-        setTab('ordu')
-        setBotId(null)
-      },
-      message: (id) => {
-        setDmTarget(id)
-        setTab('mesajlar')
-        setBotId(null)
-      },
-      setTab,
-    }
-
-  if (!game || !ctx) {
+  if (!game) {
     return (
       <Setup
         onStart={(g) => {
           saveGame(g)
           setGame(g)
-          window.scrollTo(0, 0)
+          setCity(g.player.cities[0].id)
+          setFocus({ x: g.player.x, y: g.player.y, n: 1 })
+          setView('sehir')
         }}
       />
     )
   }
 
-  const unreadDm = game.dms.reduce((s, t) => s + t.unread, 0)
-  const unread = game.reports.filter((r) => !r.read && r.time <= ctx.now).length
-
+  const notify = (text: string) => setNotes((n) => [...n, text])
   const reset = () => {
     if (!confirm('Dünyayı silip baştan başlamak istediğine emin misin?')) return
     clearSave()
+    setWin(null)
     setGame(null)
-    setTab('koy')
+  }
+
+  const ctx: Ctx = {
+    g: game,
+    now: Date.now(),
+    act: (fn) => {
+      const now = Date.now()
+      tick(game, now)
+      const r = fn(game, now)
+      const msg = typeof r === 'string' ? r : null
+      saveGame(game)
+      refresh()
+      if (msg) notify(msg)
+      return msg
+    },
+    cityId,
+    setCity: (id) => {
+      setCity(id)
+      setWin(null)
+    },
+    view,
+    setView: (v) => {
+      setView(v)
+      if (v === 'harita') {
+        const c = game.player.cities.find((x) => x.id === cityId) ?? game.player.cities[0]
+        setFocus((f) => ({ x: c.x, y: c.y, n: f.n + 1 }))
+      }
+    },
+    open: setWin,
+    close: () => setWin(null),
+    notify,
+    goto: (x, y) => {
+      setFocus((f) => ({ x, y, n: f.n + 1 }))
+      setView('harita')
+      setWin(null)
+    },
+    toggleSide: () => setSide((s) => !s),
+    reset,
   }
 
   return (
     <GameCtx.Provider value={ctx}>
-      <div className="app">
-        <TopBar onReset={reset} />
-        <nav className="tabs">
-          {TABS.map((t) => (
-            <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>
-              <span>{t.icon}</span> {t.label}
-              {t.id === 'raporlar' && unread > 0 && <b className="badge">{unread}</b>}
-              {t.id === 'mesajlar' && unreadDm > 0 && <b className="badge">{unreadDm}</b>}
-              {t.id === 'ordu' && game.incoming.some((i) => i.launch <= ctx.now) && <b className="badge red">!</b>}
-            </button>
-          ))}
-        </nav>
-        <div className="layout">
-          <main className="main">
-            {tab === 'koy' && <Village />}
-            {tab === 'ordu' && <Army target={attackTarget} clearTarget={() => setAttackTarget(null)} />}
-            {tab === 'harita' && <MapView focus={mapFocus} />}
-            {tab === 'siralama' && <Rankings />}
-            {tab === 'boy' && <AllianceView />}
-            {tab === 'raporlar' && <Reports />}
-            {tab === 'mesajlar' && <Messages openId={dmTarget} clearOpen={clearDm} />}
-          </main>
-          <aside className="side">
-            <ChatPanel />
-          </aside>
+      <div className={`frame ${side ? 'side-open' : ''}`}>
+        <div className="stage">
+          {view === 'harita' ? <MapView focus={focus} onHover={setHover} /> : <CityView />}
+          <Hud hover={hover} />
+          <div className="edge-tabs">
+            <button className={chat === 'alliance' ? 'active' : ''} onClick={() => setChat(chat === 'alliance' ? null : game.player.allianceId ? 'alliance' : 'world')}>BİRLİK MESAJI</button>
+            <button className={chat === 'world' || chat === 'feed' ? 'active' : ''} onClick={() => setChat(chat === 'world' ? null : 'world')}>SOHBET</button>
+          </div>
+          {chat && <ChatPanel ch={chat} setCh={setChat} onClose={() => setChat(null)} />}
         </div>
-        {botId !== null && <BotModal id={botId} onClose={() => setBotId(null)} />}
+        <Sidebar onTab={() => setSide(false)} />
+        {side && <div className="side-scrim" onClick={() => setSide(false)} />}
+        {win && <WinSwitch w={win} />}
+        {notes[0] && (
+          <div className="win-bg notice-bg">
+            <div className="notice">
+              <p>{notes[0]}</p>
+              <button className="btn-gold" onClick={() => setNotes((n) => n.slice(1))}>Tamam</button>
+            </div>
+          </div>
+        )}
         {game.winner && <WinnerModal onReset={reset} />}
       </div>
     </GameCtx.Provider>

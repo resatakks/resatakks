@@ -5,9 +5,10 @@ import {
 } from '../game/engine'
 import { useG } from '../ctx'
 import { fmt, fmtDur } from '../format'
+import { Tag, Window } from './ui'
 
 export default function AllianceView() {
-  const { g, now, act, openBot } = useG()
+  const { g, now, act, open } = useG()
   const p = g.player
   const ally = allianceOf(g, p.allianceId)
   const stats = allianceStats(g)
@@ -22,22 +23,21 @@ export default function AllianceView() {
       .sort((a, b) => b.s.pop - a.s.pop)
     const pp = playerPop(p)
     return (
-      <div>
-        <h2>Boy</h2>
-        <p className="muted">Bir boya katıl ya da kendi boyunu kur. Boylar birbirini korur ve birlikte Umaykut’u diker.</p>
+      <Window title="Birlik" wide>
+        <p className="muted">Bir birliğe katıl ya da kendi birliğini kur. Birlikler birbirini korur ve birlikte Umaykut’u diker.</p>
         {g.application && (
           <p className="note">
-            {allianceOf(g, g.application.allianceId)?.name} boyuna başvurdun. Boy beyi değerlendiriyor… ({fmtDur(g.application.at - now)})
+            {allianceOf(g, g.application.allianceId)?.name} birliğine başvurdun. Birlik lideri değerlendiriyor… ({fmtDur(g.application.at - now)})
           </p>
         )}
         <section className="panel">
-          <h3>Boylar</h3>
+          <h3>Birlikler</h3>
           <table className="table">
-            <thead><tr><th>Boy</th><th>Üye</th><th>Nüfus</th><th>Umaykut</th><th>Şart</th><th></th></tr></thead>
+            <thead><tr><th>Birlik</th><th>Üye</th><th>Nüfus</th><th>Umaykut</th><th>Şart</th><th></th></tr></thead>
             <tbody>
               {list.map(({ a, s }) => (
                 <tr key={a.id}>
-                  <td>[{a.tag}] {a.name}</td>
+                  <td><Tag tag={a.tag} color={a.color} /> {a.name}</td>
                   <td>{s.members}</td>
                   <td>{fmt(s.pop)}</td>
                   <td>{a.umaykut}</td>
@@ -51,17 +51,17 @@ export default function AllianceView() {
           </table>
         </section>
         <section className="panel">
-          <h3>Kendi boyunu kur</h3>
+          <h3>Kendi birliğini kur</h3>
           <div className="row-btns">
-            <input placeholder="Boy adı" value={name} maxLength={24} onChange={(e) => setName(e.target.value)} />
+            <input placeholder="Birlik adı" value={name} maxLength={24} onChange={(e) => setName(e.target.value)} />
             <input placeholder="Etiket" value={tag} maxLength={4} style={{ width: 80 }} onChange={(e) => setTag(e.target.value)} />
-            <button className="primary" disabled={name.trim().length < 3 || tag.trim().length < 2} onClick={() => act((g, n) => foundAlliance(g, name.trim(), tag.trim(), n))}>
+            <button className="btn-gold" disabled={name.trim().length < 3 || tag.trim().length < 2} onClick={() => act((g, n) => foundAlliance(g, name.trim(), tag.trim(), n))}>
               Kur
             </button>
           </div>
-          <p className="muted small">Kendi boyunu kurarsan yakındaki boysuz oyuncular zamanla katılır.</p>
+          <p className="muted small">Kendi birliğini kurarsan yakındaki birliksiz oyuncular zamanla katılır.</p>
         </section>
-      </div>
+      </Window>
     )
   }
 
@@ -73,8 +73,7 @@ export default function AllianceView() {
   for (const k of RES_KEYS) giftRes[k] = Math.max(0, Math.floor(+(gift[k] || 0)))
 
   return (
-    <div>
-      <h2>[{ally.tag}] {ally.name}</h2>
+    <Window title={`[${ally.tag}] ${ally.name}`} wide>
       <section className="panel umaykut-panel">
         <div className="umaykut-visual">
           {Array.from({ length: 10 }, (_, k) => (
@@ -89,7 +88,7 @@ export default function AllianceView() {
             {ally.umaykut >= 10 ? 'Tamamlandı!' : `${fmt(ally.progress)} / ${fmt(cost)} kaynak — sonraki seviye`}
           </p>
           <p className="small">
-            Halklar: {TRIBE_IDS.map((t) => (
+            Devletler: {TRIBE_IDS.map((t) => (
               <span key={t} className={s.tribes.has(t) ? '' : 'lack'}>{TRIBES[t].emblem} {TRIBES[t].name}{s.tribes.has(t) ? ' ✓' : ' ✗'} </span>
             ))}
           </p>
@@ -102,7 +101,7 @@ export default function AllianceView() {
             ))}
             <button className="link" onClick={() => setGift(Object.fromEntries(RES_KEYS.map((k) => [k, String(Math.floor(p.res[k] * 0.5))])))}>yarısı</button>
             <button
-              className="primary"
+              className="btn-gold"
               disabled={RES_KEYS.every((k) => giftRes[k] === 0)}
               onClick={() => {
                 act((g, n) => contribute(g, giftRes, n))
@@ -118,7 +117,7 @@ export default function AllianceView() {
       <section className="panel">
         <h3>Üyeler ({s.members}) · Toplam nüfus {fmt(s.pop)}</h3>
         <table className="table">
-          <thead><tr><th>Oyuncu</th><th>Halk</th><th>Nüfus</th><th>Koordinat</th><th>Durum</th></tr></thead>
+          <thead><tr><th>Oyuncu</th><th>Devlet</th><th>Nüfus</th><th>Koordinat</th><th>Durum</th></tr></thead>
           <tbody>
             <tr className="me-row">
               <td><b>{p.name}</b></td>
@@ -129,7 +128,7 @@ export default function AllianceView() {
             </tr>
             {members.map((b) => (
               <tr key={b.id}>
-                <td><button className="link" onClick={() => openBot(b.id)}>{b.name}</button></td>
+                <td><button className="link" onClick={() => open({ w: 'oyuncu', id: b.id })}>{b.name}</button></td>
                 <td>{TRIBES[b.tribe].emblem}</td>
                 <td>{fmt(b.pop)}</td>
                 <td>{b.x}|{b.y}</td>
@@ -139,12 +138,12 @@ export default function AllianceView() {
           </tbody>
         </table>
         <button
-          className="danger-btn"
-          onClick={() => confirm(ally.playerOwned ? 'Kurucu ayrılırsa boy dağılır. Emin misin?' : 'Boydan ayrılmak istediğine emin misin?') && act((g, n) => leaveAlliance(g, n))}
+          className="btn-red"
+          onClick={() => confirm(ally.playerOwned ? 'Kurucu ayrılırsa birlik dağılır. Emin misin?' : 'Birlikten ayrılmak istediğine emin misin?') && act((g, n) => leaveAlliance(g, n))}
         >
-          Boydan ayrıl
+          Birlikten ayrıl
         </button>
       </section>
-    </div>
+    </Window>
   )
 }
