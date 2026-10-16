@@ -12,7 +12,8 @@ import Reports from './components/Reports'
 import ChatPanel, { type Channel } from './components/ChatPanel'
 import WinnerModal from './components/WinnerModal'
 import Messages from './components/Messages'
-import { Hud, Sidebar } from './components/Frame'
+import { Hud } from './components/Frame'
+import { STAGE_H, STAGE_W, stage } from './stage'
 import { ElmasWin, HelpWin, MiniMap, Movements, PlayerWin, SearchWin, SendWin, SettingsWin } from './components/Windows'
 
 function initial(): Game | null {
@@ -48,9 +49,17 @@ export default function App() {
   const [notes, setNotes] = useState<string[]>([])
   const [focus, setFocus] = useState(() => ({ x: game?.player.x ?? 0, y: game?.player.y ?? 0, n: 0 }))
   const [chat, setChat] = useState<Channel | null>(null)
-  const [side, setSide] = useState(false)
+  const [k, setK] = useState(1)
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
   const refresh = useCallback(() => setVersion((v) => v + 1), [])
+
+  useEffect(() => {
+    const fit = () => setK(Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H))
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [])
+  stage.k = k
 
   useEffect(() => {
     if (!game) return
@@ -126,24 +135,23 @@ export default function App() {
       setView('harita')
       setWin(null)
     },
-    toggleSide: () => setSide((s) => !s),
+    toggleSide: () => {},
     reset,
   }
 
   return (
     <GameCtx.Provider value={ctx}>
-      <div className={`frame ${side ? 'side-open' : ''}`}>
-        <div className="stage">
-          {view === 'harita' ? <MapView focus={focus} onHover={setHover} /> : <CityView />}
-          <Hud hover={hover} />
-          <div className="edge-tabs">
-            <button className={chat === 'alliance' ? 'active' : ''} onClick={() => setChat(chat === 'alliance' ? null : game.player.allianceId ? 'alliance' : 'world')}>BİRLİK MESAJI</button>
-            <button className={chat === 'world' || chat === 'feed' ? 'active' : ''} onClick={() => setChat(chat === 'world' ? null : 'world')}>SOHBET</button>
+      <div className="frame">
+        <div className="stage-box" style={{ width: STAGE_W * k, height: STAGE_H * k }}>
+          <div className="stage" style={{ transform: `scale(${k})` }}>
+            <div className={`play ${view === 'harita' ? 'tall' : ''}`}>
+              {view === 'harita' ? <MapView focus={focus} onHover={setHover} /> : <CityView />}
+              {chat && <ChatPanel ch={chat} setCh={setChat} onClose={() => setChat(null)} />}
+            </div>
+            <img className="frame-art" src={view === 'harita' ? '/orig/frame-map.png' : '/orig/frame.png'} width={STAGE_W} height={STAGE_H} alt="" draggable={false} />
+            <Hud hover={hover} chat={chat} setChat={setChat} />
           </div>
-          {chat && <ChatPanel ch={chat} setCh={setChat} onClose={() => setChat(null)} />}
         </div>
-        <Sidebar onTab={() => setSide(false)} />
-        {side && <div className="side-scrim" onClick={() => setSide(false)} />}
         {win && <WinSwitch w={win} />}
         {notes[0] && (
           <div className="win-bg notice-bg">

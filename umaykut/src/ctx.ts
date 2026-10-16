@@ -8,7 +8,7 @@ export type WinState =
   | { w: 'siralama' }
   | { w: 'birlik' }
   | { w: 'mesaj'; id?: number }
-  | { w: 'hareket'; tab?: 'giden' | 'gelen' }
+  | { w: 'hareket'; tab?: 'giden' | 'gelen' | 'destek' }
   | { w: 'sefer'; bot: number; ci: number; type: MissionType }
   | { w: 'oyuncu'; id: number }
   | { w: 'yardim' }

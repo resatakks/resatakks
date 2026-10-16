@@ -2,7 +2,7 @@ import {
   ALLIANCE_NAMES, CITY_NAMES, FIRST_NAMES, NAME_PREFIX, NAME_SUFFIX, SERVERS, TAG_COLORS, TRIBES, TRIBE_IDS, TribeId, emptyArmy, res,
 } from './data'
 import { WORLD_LINES, pick } from './chatter'
-import { Alliance, Bot, BotCity, Game, addFeed, mineAt, newCityBuildings } from './engine'
+import { Alliance, Bot, BotCity, Game, addFeed, mineAt, newCityBuildings, seedWorkers } from './engine'
 
 export const BOT_COUNT = 1000
 const SIZE = 120
@@ -81,7 +81,9 @@ export function generateWorld(playerName: string, tribe: TribeId, serverId: stri
     const defF = 1.5 + (1 - aggr) * 5
     const atkF = 1 + aggr * 5
     const name = makeName(used)
-    const cities: BotCity[] = [{ x, y, name: cityName(name, 0) }]
+    // sezon ortasına girilir: eski köylerin çemberi büyümüş, yenilerinki küçük
+    const r0 = Math.max(0.5, Math.min(2.5, 0.4 + Math.log10(pop) * 0.62 + rnd(-0.3, 0.3)))
+    const cities: BotCity[] = [{ x, y, name: cityName(name, 0), r: r0 }]
     const want = Math.min(10, 1 + Math.floor(pop / 320 + rnd(0, 0.7)))
     for (let c = 1; c < want; c++) {
       for (let t = 0; t < 20; t++) {
@@ -91,7 +93,7 @@ export function generateWorld(playerName: string, tribe: TribeId, serverId: stri
         const cy = Math.round(y + Math.sin(a) * rr)
         if (free(cx, cy)) {
           take(cx, cy)
-          cities.push({ x: cx, y: cy, name: cityName(name, c) })
+          cities.push({ x: cx, y: cy, name: cityName(name, c), r: Math.max(0.5, r0 - rnd(0.2, 0.6) * c) })
           break
         }
       }
@@ -171,7 +173,7 @@ export function generateWorld(playerName: string, tribe: TribeId, serverId: stri
       tribe,
       x: px,
       y: py,
-      cities: [{ id: 1, name: 'merkez', x: px, y: py, b: newCityBuildings(), army: emptyArmy(), queue: [], train: [] }],
+      cities: [{ id: 1, name: 'merkez', x: px, y: py, r: 0.5, b: newCityBuildings(), army: emptyArmy(), queue: [], train: [], folk: 20, work: {}, guests: [] }],
       res: res(900, 900, 900, 900, 150, 0),
       elmas: 100,
       allianceId: null,
@@ -181,10 +183,13 @@ export function generateWorld(playerName: string, tribe: TribeId, serverId: stri
       defPts: 0,
       starveAcc: 0,
       lastDaily: now,
+      bonus: {},
+      guardUses: 0,
     },
     bots,
     alliances,
     out: [],
+    supports: [],
     incoming: [],
     reports: [],
     feed: [],
@@ -237,7 +242,23 @@ export function loadGame(): Game | null {
     const raw = localStorage.getItem(SAVE_KEY)
     if (!raw) return null
     const g = JSON.parse(raw) as Game
-    return g.version === 3 ? g : null
+    if (g.version !== 3) return null
+    // eski kayıt: çember ve yeni binalar yoksa ekle
+    for (const c of g.player.cities) {
+      c.r ??= 2.5
+      c.b.tapinak ??= 0
+      c.b.okul ??= 0
+      c.b.degirmen ??= 0
+      c.b.siginak ??= 0
+      c.guests ??= []
+    }
+    // eski kayıt: işçi sistemi yoksa köylüleri doldur ve kaynaklara dağıt
+    for (const c of g.player.cities) if (c.folk == null || !c.work) seedWorkers(g, c)
+    g.supports ??= []
+    g.player.bonus ??= {}
+    g.player.guardUses ??= 0
+    for (const b of g.bots) b.cities.forEach((c, i) => (c.r ??= i ? 1.5 : 2.5))
+    return g
   } catch {
     return null
   }

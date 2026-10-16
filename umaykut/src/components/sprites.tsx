@@ -161,9 +161,9 @@ export function BuildingSprite({ color, roof, big, empty }: { color: string; roo
 
 export function Logo({ small }: { small?: boolean }) {
   return (
-    <div className={`logo-plaque ${small ? 'small' : ''}`}>
-      <span className="logo-wolf">🐺</span>
+    <div className={`logo-banner ${small ? '' : 'big'}`}>
       <span className="logo-text">UMAYKUT</span>
+      <span className="logo-orn" />
     </div>
   )
 }

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { SPY, TRIBES, UNITS, emptyArmy } from '../game/data'
+import { SPY, TRIBES, UNITS, UNIT_ORDER, emptyArmy } from '../game/data'
 import {
-  MISSION_NAME, type MissionType, allianceOf, attackPower, buyProtection, cityById, dist, mineAt, rankings, recall, sendMission, tp, tpLevel, travelMs,
+  MISSION_NAME, type MissionType, BONUSES, type BonusId, allianceOf, attackPower, buyBonus, cityById, dist, mineAt, rankings, recall, recallSupport, sendBackGuest, sendMission, tp, tpLevel, travelMs,
 } from '../game/engine'
 import { hasPeace } from '../game/social'
 import { useG } from '../ctx'
 import { fmt, fmtAgo, fmtDur, fmtTime } from '../format'
 import { Tag, Window } from './ui'
+import { UnitArt } from './cityart'
 
 // ---------------- sefer ----------------
 export function SendWin({ bot, ci, type: t0 }: { bot: number; ci: number; type: MissionType }) {
@@ -21,6 +22,7 @@ export function SendWin({ bot, ci, type: t0 }: { bot: number; ci: number; type: 
   const d = dist(c.x, c.y, target.x, target.y)
   const picked = army.some((n) => n > 0)
   const a = allianceOf(g, b.allianceId)
+  const ally = !!a && a.id === g.player.allianceId
   const set = (i: number, v: number) => setArmy(army.map((n, k) => (k === i ? Math.max(0, Math.min(c.army[i], v)) : n)))
   const allowed = (i: number) => (type === 'casus' ? i === SPY : true)
 
@@ -39,16 +41,17 @@ export function SendWin({ bot, ci, type: t0 }: { bot: number; ci: number; type: 
       </div>
       {hasPeace(g, b.id, now) && type !== 'casus' && <p className="note bad">🤝 Bu oyuncuyla barışın var. Saldırırsan barış bozulur ve hain ilan edilirsin.</p>}
       <div className="seg">
-        {(['saldiri', 'yagma', 'casus'] as MissionType[]).map((m) => (
+        {((ally ? ['destek', 'casus'] : ['saldiri', 'yagma', 'casus']) as MissionType[]).map((m) => (
           <button key={m} className={type === m ? 'active' : ''} onClick={() => setType(m)}>
-            {m === 'saldiri' ? '⚔️' : m === 'yagma' ? '💰' : '🕵️'} {MISSION_NAME[m]}
+            {m === 'saldiri' ? '⚔️' : m === 'yagma' ? '💰' : m === 'destek' ? '🛡️' : '🕵️'} {MISSION_NAME[m]}
           </button>
         ))}
       </div>
       <p className="muted small">
-        {type === 'saldiri' && 'Saldırı: düşman ordusunu yok etmeye çalışır; koçbaşı suru, mancınık binaları yıkar.'}
+        {type === 'saldiri' && 'Saldırı: düşman ordusunu yok etmeye çalışır; mancınık suru, top binaları yıkar.'}
         {type === 'yagma' && 'Yağma: savaşmadan önce kaynak kapmaya odaklanır; kayıplar daha az, ganimet daha çok.'}
         {type === 'casus' && 'Casusluk: yalnız casuslar gider; düşmanın kaynaklarını ve ordusunu öğrenirsin.'}
+        {type === 'destek' && 'Destek: askerlerin birlik üyesinin köyünde konuşlanır ve oradaki savaşlara katılıp savunma puanı kazanır. Onları ev sahibi besler; istediğin zaman geri çağırabilirsin.'}
       </p>
       {g.player.cities.length > 1 && (
         <label className="row">
@@ -59,14 +62,14 @@ export function SendWin({ bot, ci, type: t0 }: { bot: number; ci: number; type: 
         </label>
       )}
       <div className="send-units">
-        {units.map((u, i) => (
+        {UNIT_ORDER.map((i) => units[i]).map((u, k) => { const i = UNIT_ORDER[k]; return (
           <div key={i} className={`send-unit ${!allowed(i) || !c.army[i] ? 'off' : ''}`}>
-            <span className="u-icon" title={u.name}>{u.icon}</span>
+            <span className="u-icon" title={u.name}><UnitArt tribe={g.player.tribe} i={i} /></span>
             <small>{u.name}</small>
             <input inputMode="numeric" disabled={!allowed(i) || !c.army[i]} value={army[i] || ''} placeholder="0" onChange={(e) => set(i, Number(e.target.value.replace(/\D/g, '')))} aria-label={u.name} />
             <button className="link" disabled={!allowed(i)} onClick={() => set(i, c.army[i])}>({fmt(c.army[i])})</button>
           </div>
-        ))}
+        )})}
       </div>
       <div className="send-foot">
         <span>⚔️ Saldırı gücü <b>{fmt(attackPower(g.player.tribe, army))}</b></span>
@@ -74,13 +77,13 @@ export function SendWin({ bot, ci, type: t0 }: { bot: number; ci: number; type: 
         <span>🎒 Taşıma <b>{fmt(army.reduce((s, n, i) => s + n * units[i].carry, 0))}</b></span>
         <button className="link" onClick={() => setArmy(c.army.map((n, i) => (allowed(i) && (type === 'casus' || i !== SPY) ? n : 0)))}>Hepsini seç</button>
         <button
-          className={type === 'casus' ? 'btn-gold' : 'btn-red'}
+          className={type === 'casus' || type === 'destek' ? 'btn-gold' : 'btn-red'}
           disabled={!picked}
           onClick={() => {
             if (!act((g, n) => sendMission(g, c.id, type, bot, ci, army, n))) open({ w: 'hareket', tab: 'giden' })
           }}
         >
-          Gönder
+          {type === 'destek' ? 'Destek Gönder' : 'Gönder'}
         </button>
       </div>
     </Window>
@@ -88,7 +91,7 @@ export function SendWin({ bot, ci, type: t0 }: { bot: number; ci: number; type: 
 }
 
 // ---------------- hareketler ----------------
-export function Movements({ tab: t0 }: { tab?: 'giden' | 'gelen' }) {
+export function Movements({ tab: t0 }: { tab?: 'giden' | 'gelen' | 'destek' }) {
   const { g, now, act, open } = useG()
   const [tab, setTab] = useState(t0 ?? 'giden')
   const units = UNITS[g.player.tribe]
@@ -97,8 +100,10 @@ export function Movements({ tab: t0 }: { tab?: 'giden' | 'gelen' }) {
     <Window title="Asker Hareketleri" wide>
       <div className="seg">
         <button className={tab === 'giden' ? 'active' : ''} onClick={() => setTab('giden')}>⚔️ Giden ({g.out.length})</button>
-        <button className={tab === 'gelen' ? 'active' : ''} onClick={() => setTab('gelen')}>🛡️ Gelen saldırı ({inc.length})</button>
+        <button className={tab === 'gelen' ? 'active' : ''} onClick={() => setTab('gelen')}>⚠ Gelen saldırı ({inc.length})</button>
+        <button className={tab === 'destek' ? 'active' : ''} onClick={() => setTab('destek')}>🛡️ Destekler</button>
       </div>
+      {tab === 'destek' && <Supports />}
       {tab === 'giden' && (
         <div className="moves">
           {g.out.length === 0 && <p className="muted">Seferde ordun yok. Haritada bir şehre tıklayıp “Saldır” diyebilirsin.</p>}
@@ -142,6 +147,96 @@ export function Movements({ tab: t0 }: { tab?: 'giden' | 'gelen' }) {
         </div>
       )}
     </Window>
+  )
+}
+
+// ---------------- destekler ----------------
+function Supports() {
+  const { g, now, act, open } = useG()
+  const [tab, setTab] = useState<'koy' | 'giden'>('giden')
+  const [sel, setSel] = useState<Set<number>>(new Set())
+  const toggle = (id: number) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const guests = g.player.cities.flatMap((c) => (c.guests ?? []).map((gu) => ({ c, gu })))
+  const here = guests.filter((x) => x.gu.arrive <= now)
+  const coming = guests.filter((x) => x.gu.arrive > now)
+  const units = UNITS[g.player.tribe]
+  const Units = ({ army, tribe }: { army: number[]; tribe: keyof typeof UNITS }) => (
+    <div className="move-units">{UNIT_ORDER.map((i) => (army[i] ? <span key={i} title={UNITS[tribe][i].name}><UnitArt tribe={tribe} i={i} /> {fmt(army[i])}</span> : null))}</div>
+  )
+  return (
+    <div className="moves">
+      <div className="seg">
+        <button className={tab === 'giden' ? 'active' : ''} onClick={() => { setTab('giden'); setSel(new Set()) }}>Gönderilmiş Destekler ({g.supports.length})</button>
+        <button className={tab === 'koy' ? 'active' : ''} onClick={() => { setTab('koy'); setSel(new Set()) }}>Köydeki Destekler ({here.length})</button>
+      </div>
+      {tab === 'giden' && (
+        <>
+          {g.supports.length === 0 && <p className="muted">Gönderilmiş desteğin yok. Haritada birlik üyesinin şehrine tıklayıp “Destek Gönder” diyebilirsin.</p>}
+          {g.supports.map((s) => {
+            const b = g.bots[s.target]
+            const t = b.cities[s.tc] ?? b.cities[0]
+            return (
+              <label key={s.id} className="move">
+                <input type="checkbox" checked={sel.has(s.id)} onChange={() => toggle(s.id)} />
+                <div>
+                  <b>{t.name} ({t.x}|{t.y})</b> · <button className="link" onClick={() => open({ w: 'oyuncu', id: b.id })}>{b.name}</button>
+                  <small className="muted"> · {cityById(g, s.cityId).name} şehrinden · savunma puanı {fmt(s.defPts)}</small>
+                  <Units army={s.army} tribe={g.player.tribe} />
+                </div>
+              </label>
+            )
+          })}
+          {g.out.filter((m) => m.type === 'destek').map((m) => (
+            <div key={m.id} className={`move ${m.returning ? 'back' : ''}`}>
+              <div>
+                <b>{m.returning ? '↩ Dönüyor' : '➜ Destek yolda'}</b> · {g.bots[m.target].name}
+                <div className="move-units">{m.army.map((n, i) => (n ? <span key={i}>{units[i].icon} {fmt(n)}</span> : null))}</div>
+              </div>
+              <b className="timer">{fmtDur((m.returning ? m.back : m.arrive) - now)}</b>
+            </div>
+          ))}
+          {g.supports.length > 0 && (
+            <div className="ti-actions">
+              <button className="btn-gold" disabled={!sel.size} onClick={() => { act((g, n) => { for (const id of sel) recallSupport(g, id, n) }); setSel(new Set()) }}>Seçilenleri Geri Çağır</button>
+            </div>
+          )}
+        </>
+      )}
+      {tab === 'koy' && (
+        <>
+          <p className="small">Gelen destek sayısı : <b>{coming.length}</b></p>
+          {coming.map(({ c, gu }) => (
+            <div key={gu.id} className="move incoming">
+              <div>
+                <b>Gelen Destekler</b> · {g.bots[gu.from].name} → {c.name}
+                <Units army={gu.army} tribe={g.bots[gu.from].tribe} />
+              </div>
+              <b className="timer">{fmtDur(gu.arrive - now)}</b>
+            </div>
+          ))}
+          {here.length === 0 && <p className="muted">Köylerinde destek askeri yok. Birliğindekiler saldırı gördüklerinde destek yollayabilir.</p>}
+          {here.map(({ c, gu }) => {
+            const b = g.bots[gu.from]
+            return (
+              <label key={gu.id} className="move">
+                <input type="checkbox" checked={sel.has(gu.id)} onChange={() => toggle(gu.id)} />
+                <div>
+                  <b>{c.name}</b> · <button className="link" onClick={() => open({ w: 'oyuncu', id: b.id })}>{b.name}</button>
+                  <small className="muted"> · {fmtDur(gu.until - now)} sonra dönecek</small>
+                  <Units army={gu.army} tribe={b.tribe} />
+                </div>
+              </label>
+            )
+          })}
+          {here.length > 0 && (
+            <div className="ti-actions">
+              <button className="btn-gold" disabled={!sel.size} onClick={() => { act((g) => { for (const { c, gu } of here) if (sel.has(gu.id)) sendBackGuest(g, c.id, gu.id) }); setSel(new Set()) }}>Seçilenleri Geri Gönder</button>
+            </div>
+          )}
+          <p className="muted small">Köydeki destekleri sen beslersin; tahılın biterse önce onlar ölür.</p>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -199,6 +294,7 @@ export function PlayerWin({ id }: { id: number }) {
             <button className="link" onClick={() => goto(c.x, c.y)}>{c.name} ({c.x}|{c.y})</button>
             {!ally && <button className="mini red" onClick={() => open({ w: 'sefer', bot: b.id, ci: i, type: 'saldiri' })}>⚔️</button>}
             {!ally && <button className="mini" onClick={() => open({ w: 'sefer', bot: b.id, ci: i, type: 'yagma' })}>💰</button>}
+            {ally && <button className="mini" title="Destek Gönder" onClick={() => open({ w: 'sefer', bot: b.id, ci: i, type: 'destek' })}>🛡️</button>}
             <button className="mini" onClick={() => open({ w: 'sefer', bot: b.id, ci: i, type: 'casus' })}>🕵️</button>
           </div>
         ))}
@@ -287,16 +383,40 @@ export function MiniMap() {
 // ---------------- elmas ----------------
 export function ElmasWin() {
   const { g, act, now } = useG()
+  const [ask, setAsk] = useState<BonusId | null>(null)
+  const p = g.player
+  const def = BONUSES.find((b) => b.id === ask)
   return (
-    <Window title="Elmas">
-      <p>Elmasın: <b>💎 {fmt(g.player.elmas)}</b></p>
-      <p className="muted small">Bu yerel sürümde gerçek para yok. Elmas her gün giriş ödülü olarak, savunma zaferlerinde ve görevlerde kazanılır.</p>
-      <table className="kv"><tbody>
-        <tr><td>İnşaatı hemen bitir</td><td>her 2 dakika için 1 💎</td></tr>
-        <tr><td>24 saat koruma</td><td>30 💎</td></tr>
-      </tbody></table>
-      <button className="btn-gold" onClick={() => act((g, n) => buyProtection(g, n))}>🛡️ 24 saat koruma al (30 💎)</button>
-      {g.player.protectionUntil > now && <p className="note ok">Koruma aktif: {fmtDur(g.player.protectionUntil - now)}</p>}
+    <Window title="Bonuslar" wide>
+      <p className="bonus-top">Elmas : <b>{fmt(p.elmas)}</b> <span className="muted small">Elinizdeki elmasları kullanarak ordularınızı ve ekonominizi güçlendirebilirsiniz.</span></p>
+      <div className="bonus-list">
+        {BONUSES.map((b) => {
+          const left = (p.bonus?.[b.id] ?? 0) - now
+          return (
+            <div key={b.id} className={`bonus-row ${left > 0 ? 'on' : ''}`}>
+              <div>
+                <b>{b.title}</b>
+                <p className="small">
+                  {b.label.replace('$', String(b.days))}
+                  {b.id === 'koruma' && <span className="bad"> Bu bonusu {p.guardUses ?? 0} kez kullanmışsınız</span>}
+                </p>
+                {left > 0 && <small className="ok">Kalan süre: {fmtDur(left)}</small>}
+              </div>
+              <span className="bonus-price">{b.price} <small>elmas</small></span>
+              <button className="btn-gold" onClick={() => setAsk(b.id)}>Bonus Al</button>
+            </div>
+          )
+        })}
+      </div>
+      {def && (
+        <div className="bonus-ask">
+          <p>{def.ask}</p>
+          <p className="muted small">{def.price} elmas harcanacaktır.</p>
+          <button className="btn-gold" onClick={() => { act((g, n) => buyBonus(g, def.id, n)); setAsk(null) }}>Evet</button>{' '}
+          <button onClick={() => setAsk(null)}>Hayır</button>
+        </div>
+      )}
+      <p className="muted small">Bu yerel sürümde gerçek para yok. Elmas her gün giriş ödülü olarak kazanılır; inşaatı hemen bitirmek her 2 dakika için 1 elmastır.</p>
     </Window>
   )
 }
@@ -323,7 +443,7 @@ export function HelpWin() {
     <Window title="Yardım" wide>
       <div className="help">
         <h5>Başlangıç</h5>
-        <p>Şehrindeki binalara tıkla: Taşçı, Oduncu, Tarla ve Demirci kaynak üretir. Ambar depolama sınırını, Merkez inşaat hızını belirler. Aynı anda 2 inşaat sıraya girebilir.</p>
+        <p>Şehrindeki binalara tıkla: Taşçı, Keresteci, Tarla ve Demirci kaynak üretir. Ambar depolama sınırını, Merkez inşaat hızını belirler. Aynı anda 2 inşaat sıraya girebilir.</p>
         <h5>Madenler</h5>
         <p>Haritadaki taş ocağı, orman, tahıl tarlası ve demir madenleri {`2,5`} kare çevresindeki şehirlerin üretimini artırır. Yeni köyünü madenlerin arasına kur.</p>
         <h5>Ordu</h5>

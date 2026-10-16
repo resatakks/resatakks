@@ -54,7 +54,7 @@ export default function AllianceView() {
           <h3>Kendi birliğini kur</h3>
           <div className="row-btns">
             <input placeholder="Birlik adı" value={name} maxLength={24} onChange={(e) => setName(e.target.value)} />
-            <input placeholder="Etiket" value={tag} maxLength={4} style={{ width: 80 }} onChange={(e) => setTag(e.target.value)} />
+            <input placeholder="Etiket" value={tag} maxLength={3} style={{ width: 80 }} onChange={(e) => setTag(e.target.value)} />
             <button className="btn-gold" disabled={name.trim().length < 3 || tag.trim().length < 2} onClick={() => act((g, n) => foundAlliance(g, name.trim(), tag.trim(), n))}>
               Kur
             </button>

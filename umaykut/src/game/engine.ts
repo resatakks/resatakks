@@ -1,5 +1,5 @@
 import {
-  BUILDINGS, BUILDING_MAP, BuildingId, CATAPULT, CITY_TP, MAX_CITIES, MINE_RADIUS, MINE_TYPES, MineType, RAM, RES_KEYS, Res, SPY, STORED,
+  BUILDINGS, BUILDING_MAP, BuildingId, CATAPULT, CITY_TP, MAX_CITIES, MAX_CITY_GAP, MINE_TYPES, RING_DAY, RING_MAX, RING_MIN, RING_OKUL, MineType, RAM, RES_KEYS, Res, SPY, STORED,
   TRIBES, TribeId, TrainBuilding, UNITS, UNIT_COUNT, cityFoundCost, emptyArmy, zeroRes,
 } from './data'
 import {
@@ -10,7 +10,8 @@ import {
 } from './social'
 
 // ---------------- tipler ----------------
-export interface BotCity { x: number; y: number; name: string }
+/** r: köy çemberinin yarıçapı (birim) */
+export interface BotCity { x: number; y: number; name: string; r?: number }
 export interface Bot {
   id: number
   name: string
@@ -53,11 +54,23 @@ export interface City {
   name: string
   x: number
   y: number
+  /** köy çemberinin yarıçapı (birim); her gün büyür */
+  r: number
   b: Record<BuildingId, number>
   army: number[]
   queue: BuildJob[]
   train: TrainJob[]
+  /** köydeki toplam köylü (boştakiler + kaynaktakiler); askere alınanlar düşülür */
+  folk: number
+  /** kaynaklarda çalışan işçiler: key(x,y) → sayı */
+  work: Record<string, number>
+  /** birlik üyelerinin bu köye gönderdiği destek askerleri (köy besler) */
+  guests: Guest[]
 }
+/** botun oyuncu köyüne gönderdiği destek; ordu botun devletinin birimleridir */
+export interface Guest { id: number; from: number; army: number[]; arrive: number; until: number; power: number }
+/** oyuncunun birlik üyesine gönderip orada konuşlu tuttuğu destek */
+export interface Support { id: number; cityId: number; target: number; tc: number; army: number[]; since: number; defPts: number }
 
 export interface Player {
   name: string
@@ -76,12 +89,69 @@ export interface Player {
   defPts: number
   starveAcc: number
   lastDaily: number
+  /** elmasla alınan bonuslar: bonus → bitiş anı */
+  bonus: Partial<Record<BonusId, number>>
+  /** koruma bonusunun kaç kez kullanıldığı (oyun boyunca en fazla 20) */
+  guardUses: number
+}
+
+// ---------------- bonuslar (orijinal metinler ve fiyatlar) ----------------
+export type BonusId = 'tas' | 'tahil' | 'odun' | 'demir' | 'nufus' | 'at' | 'saldiri' | 'savunma' | 'bayrak' | 'koruma' | 'siginak'
+export interface BonusDef { id: BonusId; title: string; label: string; ask: string; price: number; days: number }
+export const BONUS_DAYS = 3
+export const GUARD_MAX = 20
+export const BONUSES: BonusDef[] = [
+  { id: 'tas', title: '%25 taş üretimi artışı', label: '$ gün boyunca bütün şehirlerinizde tüm taş kaynaklarındaki saatlik taş üretim hızı %25 artar.', ask: '%25 Taş üretimi bonusu satın almak istediğinize emin misiniz?', price: 10, days: BONUS_DAYS },
+  { id: 'tahil', title: '%25 tahıl üretimi artışı', label: '$ gün boyunca bütün şehirlerinizde tüm tahıl kaynaklarındaki saatlik tahıl üretim hızı %25 artar.', ask: '%25 Tahıl üretimi bonusu satın almak istediğinize emin misiniz?', price: 10, days: BONUS_DAYS },
+  { id: 'odun', title: '%25 odun üretimi artışı', label: '$ gün boyunca bütün şehirlerinizdeki tüm odun kaynaklarında saatlik odun üretim hızı %25 artar.', ask: '%25 Odun üretimi bonusu satın almak istediğinize emin misiniz?', price: 10, days: BONUS_DAYS },
+  { id: 'demir', title: '%25 demir üretimi artışı', label: '$ gün boyunca bütün şehirlerinizdeki tüm demir kaynaklarında saatlik demir üretim hızı %25 artar.', ask: '%25 Demir üretimi bonusu satın almak istediğinize emin misiniz?', price: 10, days: BONUS_DAYS },
+  { id: 'nufus', title: '%25 yeni nüfus oluşma hızı', label: '$ gün boyunca bütün şehirlerinizde yeni nüfus oluşma hızı %25 artar.', ask: '%25 Nüfus artış bonusu satın almak istediğinize emin misiniz?', price: 20, days: BONUS_DAYS },
+  { id: 'at', title: 'At Üretimi Artışı', label: '$ gün boyunca at üretimi 2 katına çıkacaktır.', ask: 'At Üretimi Artışı bonusunu satın almak istediğinize emin misiniz?', price: 15, days: BONUS_DAYS },
+  { id: 'saldiri', title: '%15 saldırı gücü artışı', label: '$ gün boyunca katıldığınız bütün savaşlarda ordunuzdaki her bir askerin saldırı gücü %15 artar.', ask: '%15 Saldırı bonusu satın almak istediğinize emin misiniz?', price: 20, days: BONUS_DAYS },
+  { id: 'savunma', title: '%15 savunma gücü artışı', label: '$ gün boyunca katıldığınız bütün savaşlarda ordunuzdaki her bir askerin savunma gücü %15 artar.', ask: '%15 Savunma bonusu satın almak istediğinize emin misiniz?', price: 20, days: BONUS_DAYS },
+  { id: 'bayrak', title: 'İktidar Bayrağı', label: '$ gün boyunca bütün şehirlerinizin üzerinde dalgalanacak bir bayrağa sahip olacaksınız.', ask: '10 elmas karşılığında İktidar Bayrağı satın almak istediğinize emin misiniz? Uyarı: Bu bayrak önceki bayrağınızın yerine geçecektir.', price: 10, days: BONUS_DAYS },
+  { id: 'koruma', title: 'Saldırılara karşı koruma', label: '$ gün boyunca size ait hiçbir şehre oyuncular saldıramaz ve siz de diğer oyunculara saldıramazsınız.', ask: 'Koruma bonusu satın almak istediğinize emin misiniz? Bu bonusu oyun boyunca 20 kez kullanabilirsiniz.', price: 30, days: 1 },
+  { id: 'siginak', title: 'Sığınak Bonusu', label: 'Sığınak bonusu $ gün boyunca sığınakların korumasını 3 katına çıkarır', ask: 'Sığınak korumasını 3 katına çıkaran bonusu almak istediğinize emin misiniz?', price: 25, days: BONUS_DAYS },
+]
+export const hasBonus = (g: Game, id: BonusId, now = g.lastTick) => (g.player.bonus?.[id] ?? 0) > now
+
+export function buyBonus(g: Game, id: BonusId, now: number): string | null {
+  const p = g.player
+  const def = BONUSES.find((b) => b.id === id)!
+  if (p.elmas < def.price) return `Bu işlemi yapabilmek için ${def.price} elmasa ihtiyacınız var!`
+  p.bonus ??= {}
+  if (id === 'koruma') {
+    if ((p.guardUses ?? 0) >= GUARD_MAX) return `Koruma bonusunu oyun boyunca en fazla ${GUARD_MAX} kez kullanabilirsiniz.`
+    if (g.out.some((m) => m.type !== 'casus' && m.type !== 'destek' && !m.returning)) return 'Seferdeki ordun varken koruma alınamaz'
+    p.guardUses = (p.guardUses ?? 0) + 1
+    g.incoming = []
+  }
+  p.elmas -= def.price
+  const ms = def.days * 86400000
+  p.bonus[id] = (id === 'bayrak' ? now : Math.max(now, p.bonus[id] ?? 0)) + ms
+  if (id === 'koruma') {
+    p.protectionUntil = Math.max(p.protectionUntil, p.bonus[id]!)
+    p.protectionNotified = false
+  }
+  return null
+}
+
+function bonusTick(g: Game, t1: number) {
+  const b = g.player.bonus
+  if (!b) return
+  for (const d of BONUSES) {
+    const until = b[d.id]
+    if (until && until <= t1) {
+      delete b[d.id]
+      addReport(g, { time: until, kind: 'bilgi', title: 'Bonus Süresi Bitti', lines: [`${d.title} bonusunuzun süresi bitmiştir.`] })
+    }
+  }
 }
 
 export interface BuildJob { b: BuildingId; to: number; start: number; end: number }
 export interface TrainJob { b: TrainBuilding; unit: number; count: number; done: number; start: number; each: number }
-export type MissionType = 'yagma' | 'saldiri' | 'casus'
-export const MISSION_NAME: Record<MissionType, string> = { yagma: 'Yağma', saldiri: 'Saldırı', casus: 'Casusluk' }
+export type MissionType = 'yagma' | 'saldiri' | 'casus' | 'destek'
+export const MISSION_NAME: Record<MissionType, string> = { yagma: 'Yağma', saldiri: 'Saldırı', casus: 'Casusluk', destek: 'Destek' }
 export interface Outgoing {
   id: number
   type: MissionType
@@ -124,6 +194,7 @@ export interface Game {
   bots: Bot[]
   alliances: Alliance[]
   out: Outgoing[]
+  supports: Support[]
   incoming: Incoming[]
   reports: Report[]
   feed: FeedItem[]
@@ -174,12 +245,22 @@ export function occupancy(g: Game) {
   return map
 }
 
-export function minesNear(g: Game, x: number, y: number, type?: MineType) {
+/** çemberin kapladığı mesafe: çember karenin kenarına değiyorsa o kare içeridedir */
+export const ringReach = (r: number) => r + 0.5
+export const ringOf = (c: { r?: number }) => c.r ?? RING_MAX
+
+/** köy çemberinin günlük büyümesi (birim / gerçek gün) */
+export function ringGrowthPerDay(g: Game, c: City) {
+  return RING_DAY * (1 + RING_OKUL * c.b.okul) * (g.player.tribe === 'gokturk' ? 1.25 : 1) * g.speed
+}
+
+export function minesNear(g: Game, x: number, y: number, type?: MineType, ring = RING_MAX) {
   const out: { x: number; y: number; m: Mine }[] = []
-  const r = Math.ceil(MINE_RADIUS)
+  const reach = ringReach(ring)
+  const r = Math.ceil(reach)
   for (let dy = -r; dy <= r; dy++) {
     for (let dx = -r; dx <= r; dx++) {
-      if (Math.hypot(dx, dy) > MINE_RADIUS) continue
+      if ((!dx && !dy) || Math.hypot(dx, dy) > reach) continue
       const m = mineAt(g, x + dx, y + dy)
       if (m && (!type || m.type === type)) out.push({ x: x + dx, y: y + dy, m })
     }
@@ -213,34 +294,141 @@ export const unitCost = (tribe: TribeId, unit: number): Res => {
   return r
 }
 
-export const cityPop = (c: City) => BUILDINGS.reduce((s, b) => s + levelPop(c.b[b.id]), 0)
+export const cityPop = (c: City) => Math.round(BUILDINGS.reduce((s, b) => s + levelPop(c.b[b.id]), 0) * (1 + (c.b.tapinak ?? 0) * 0.05))
 export const playerPop = (p: Player) => p.cities.reduce((s, c) => s + cityPop(c), 0)
 export const tp = (p: Player) => Math.floor(playerPop(p) + p.raidPts + p.defPts)
 export const tpLevel = (t: number) => Math.floor(Math.sqrt(t / 30)) + 1
 export const tpForLevel = (l: number) => 30 * (l - 1) * (l - 1)
 export const cityById = (g: Game, id: number) => g.player.cities.find((c) => c.id === id) ?? g.player.cities[0]
 
-export function mineFactor(g: Game, c: City, type: MineType) {
-  const sum = minesNear(g, c.x, c.y, type).reduce((s, m) => s + m.m.level, 0)
-  return Math.min(3.5, 0.5 + sum * 0.1)
+// ---------------- işçiler ----------------
+// Orijinal: köyde zamanla yeni köylüler doğar; boştakiler çember içindeki kaynaklara
+// gönderilir ve saatlik üretim kaynaktaki işçi sayısına bağlıdır. Taşçı/Keresteci/
+// Demirci/Tarla binaları o kaynağın üretimini çarpar; kaynağı olmayan köyde işe yaramaz.
+/** bir kaynağa en fazla gönderilebilecek işçi (tüm oyuncular toplamı) */
+export const mineCapacity = (level: number) => level * 10
+/** bir işçinin dakikalık verimi */
+export const workerYield = (level: number) => 0.5 + level * 0.25
+/** üretimi çarpan bina */
+export const MULT_BUILDING: Record<MineType, BuildingId> = { tas: 'tasci', odun: 'oduncu', tahil: 'degirmen', demir: 'demirci' }
+export const buildingMult = (level: number) => 1 + level * 0.15
+export const folkCap = (c: City) => 40 + cityPop(c) * 3
+/** dakikada doğan köylü */
+export const folkGrowth = (g: Game, c: City) => (0.6 + cityPop(c) * 0.01) * (1 + (c.b.tapinak ?? 0) * 0.1) * (hasBonus(g, 'nufus') ? 1.25 : 1) * g.speed
+export const assigned = (c: City) => Object.values(c.work).reduce((s, n) => s + n, 0)
+export const idleFolk = (c: City) => Math.max(0, Math.floor(c.folk) - assigned(c))
+const wkey = (x: number, y: number) => String(key(x, y))
+
+/** kaynaktaki diğer oyuncuların işçileri (yakındaki bot köylerinden, tohumla) */
+export function othersAt(g: Game, x: number, y: number) {
+  const m = mineAt(g, x, y)
+  if (!m) return 0
+  const occ = occupancy(g)
+  let n = 0
+  for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+    const o = occ.get(key(x + dx, y + dy))
+    if (!o || !('bot' in o)) continue
+    const b = g.bots[o.bot]
+    const bc = b.cities[o.ci]
+    if (Math.hypot(dx, dy) > ringReach(ringOf(bc)) || b.activity <= 0) continue
+    n += Math.floor(hash(g.seed, x, y, 10 + o.bot) * mineCapacity(m.level) * 0.5)
+  }
+  return Math.min(mineCapacity(m.level), n)
 }
+/** bu kaynakta oyuncunun tüm köylerinden çalışan işçi */
+export const oursAt = (g: Game, x: number, y: number) => g.player.cities.reduce((s, c) => s + (c.work[wkey(x, y)] ?? 0), 0)
+/** kaynağın çemberine girdiği oyuncu köyleri */
+export const citiesReaching = (g: Game, x: number, y: number) =>
+  g.player.cities.filter((c) => Math.hypot(c.x - x, c.y - y) <= ringReach(c.r))
+
+export function sendWorkers(g: Game, cityId: number, x: number, y: number, n: number): string | null {
+  const c = cityById(g, cityId)
+  const m = mineAt(g, x, y)
+  n = Math.floor(n)
+  if (!m) return 'Burada kaynak yok.'
+  if (Math.hypot(c.x - x, c.y - y) > ringReach(c.r)) return 'Bu kaynak köyünüzün çemberinin dışında.'
+  if (n < 1) return 'Gönderilecek işçi sayısını yazın.'
+  const free = mineCapacity(m.level) - othersAt(g, x, y) - oursAt(g, x, y)
+  if (free <= 0) return 'Kaynak kapasitesi dolmuştur.'
+  if (n > free) return 'Bu kaynağa daha fazla işçi gönderemezsiniz.'
+  if (n > idleFolk(c)) return `Komutanım boşta ${idleFolk(c)} işçimiz var`
+  c.work[wkey(x, y)] = (c.work[wkey(x, y)] ?? 0) + n
+  return null
+}
+export function retrieveWorkers(g: Game, cityId: number, x: number, y: number, n: number): string | null {
+  const c = cityById(g, cityId)
+  const k = wkey(x, y)
+  n = Math.floor(n)
+  if (n < 1) return 'Geri çekilecek işçi sayısını yazın.'
+  if (n > (c.work[k] ?? 0)) return 'Bu kaynaktan daha fazla işçi çekemezsiniz.'
+  c.work[k] -= n
+  if (!c.work[k]) delete c.work[k]
+  return null
+}
+/** çemberden çıkan / kapasiteyi aşan atamaları düzelt */
+function fixWork(g: Game, c: City) {
+  for (const k of Object.keys(c.work)) {
+    const x = +k % 10000, y = Math.floor(+k / 10000)
+    if (!mineAt(g, x, y) || Math.hypot(c.x - x, c.y - y) > ringReach(c.r)) delete c.work[k]
+  }
+  let over = assigned(c) - Math.floor(c.folk)
+  for (const k of Object.keys(c.work)) {
+    if (over <= 0) break
+    const d = Math.min(over, c.work[k])
+    c.work[k] -= d
+    over -= d
+    if (!c.work[k]) delete c.work[k]
+  }
+}
+/** eski kayıt: köylüleri doldur ve çember içindeki kaynaklara dağıt (üretim sıfırlanmasın) */
+export function seedWorkers(g: Game, c: City) {
+  c.folk = folkCap(c)
+  c.work = {}
+  const mines = minesNear(g, c.x, c.y, undefined, c.r).sort((a, b) => b.m.level - a.m.level)
+  for (const mn of mines) {
+    const n = Math.min(idleFolk(c), mineCapacity(mn.m.level) - othersAt(g, mn.x, mn.y))
+    if (n > 0) c.work[wkey(mn.x, mn.y)] = n
+  }
+}
+
+/** bu köyün bu tür kaynaklarından dakikalık ham üretimi (işçi × verim) */
+export function workOutput(g: Game, c: City, type: MineType) {
+  let s = 0
+  for (const [k, n] of Object.entries(c.work ?? {})) {
+    const m = mineAt(g, +k % 10000, Math.floor(+k / 10000))
+    if (m && m.type === type) s += n * workerYield(m.level)
+  }
+  return s
+}
+export const workersOn = (g: Game, c: City, type: MineType) =>
+  Object.entries(c.work ?? {}).reduce((s, [k, n]) => (mineAt(g, +k % 10000, Math.floor(+k / 10000))?.type === type ? s + n : s), 0)
 
 export function cityRates(g: Game, c: City): Res {
   const p = g.player
   const r = zeroRes()
-  const mineBonus = p.tribe === 'gokturk' ? 1.15 : 1
-  for (const b of BUILDINGS) {
-    if (!b.produces) continue
-    r[b.produces] = (3 + prodPerMin(c.b[b.id]) * mineFactor(g, c, b.produces)) * mineBonus
-  }
+  const tribe = p.tribe === 'gokturk' ? 1.15 : 1
+  for (const t of MINE_TYPES) r[t] = (3 + workOutput(g, c, t) * buildingMult(c.b[MULT_BUILDING[t]])) * tribe * (hasBonus(g, t) ? 1.25 : 1)
+  // Tarla kendisi de saatte tahıl verir (seviye başına)
+  r.tahil += c.b.tarla * 2 * tribe
   r.altin = cityPop(c) * 0.12 * (p.tribe === 'selcuklu' ? 1.2 : 1)
-  r.at = c.b.ahir * 0.4
+  r.at = c.b.ahir * 0.4 * (hasBonus(g, 'at') ? 2 : 1)
   return r
 }
 
 export function upkeepPerMin(g: Game) {
   const units = UNITS[g.player.tribe]
-  return totalArmy(g).reduce((s, n, i) => s + n * units[i].upkeep, 0)
+  let s = totalArmy(g).reduce((s, n, i) => s + n * units[i].upkeep, 0)
+  // köydeki destekleri ev sahibi besler
+  for (const c of g.player.cities) for (const gu of activeGuests(c, g.lastTick)) {
+    const bu = UNITS[g.bots[gu.from].tribe]
+    s += gu.army.reduce((t, n, i) => t + n * bu[i].upkeep, 0)
+  }
+  return s
+}
+
+export const activeGuests = (c: City, now: number) => (c.guests ?? []).filter((x) => x.arrive <= now)
+export function guestDefense(g: Game, c: City, now: number, cav = 0.5) {
+  return activeGuests(c, now).reduce((s, x) => s + armyDefense(g.bots[x.from].tribe, x.army, cav), 0)
 }
 
 export function rates(g: Game): Res {
@@ -253,6 +441,11 @@ export function rates(g: Game): Res {
   for (const k of RES_KEYS) r[k] *= g.speed
   return r
 }
+
+/** Sığınak: her seviye her üründen 500 adedi yağmadan korur; bonusla 3 katı. */
+export const shelterCap = (g: Game, now = g.lastTick) =>
+  g.player.cities.reduce((s, c) => s + (c.b.siginak ?? 0) * 500, 0) * (hasBonus(g, 'siginak', now) ? 3 : 1)
+const safeNote = (g: Game, now: number) => (shelterCap(g, now) > 0 ? `Sığınaklar her üründen ${fmt(shelterCap(g, now))} adedi yağmadan korudu` : null)
 
 export const cap = (g: Game) => g.player.cities.reduce((s, c) => s + storageCap(c.b.ambar), 0)
 
@@ -278,16 +471,59 @@ export function botDefense(b: Bot) {
   return (b.def + 15 + b.pop * 1.5) * (1 + b.sur * 0.06) * (b.tribe === 'gokturk' ? 1.15 : b.tribe === 'hun' ? 0.9 : 1)
 }
 
-export function cityDefense(g: Game, c: City) {
-  const p = g.player
-  const units = UNITS[p.tribe]
-  const troops = c.army.reduce((s, n, i) => s + n * units[i].def, 0)
-  return (troops + 15 + cityPop(c) * 1.5) * (1 + c.b.sur * 0.06)
+/** Asker değerleri forum ölçeğinde; botların soyut güç puanları bu katla aynı ölçeğe çevrilir. */
+export const BOT_K = 1.9
+
+/** Okçular yanlarında yakın dövüş askeri varsa 2 kat etkilidir (yeterli değilse oranında). */
+function archerMul(tribe: TribeId, army: number[]) {
+  const units = UNITS[tribe]
+  let melee = 0
+  let arch = 0
+  army.forEach((n, i) => {
+    const u = units[i]
+    if (u.archer) arch += n
+    else if (u.kind === 'piyade' || u.kind === 'suvari') melee += n
+  })
+  return arch ? 1 + Math.min(1, melee / arch) : 1
 }
 
 export function attackPower(tribe: TribeId, army: number[]) {
   const units = UNITS[tribe]
-  return army.reduce((s, n, i) => s + n * units[i].atk, 0)
+  const m = archerMul(tribe, army)
+  return army.reduce((s, n, i) => s + n * units[i].atk * (units[i].archer ? m : 1), 0)
+}
+
+/** Saldırı gücünün süvarilerden gelen payı (0–1); savunma bu orana göre yaya/atlı değerinden hesaplanır. */
+export function cavShare(tribe: TribeId, army: number[]) {
+  const units = UNITS[tribe]
+  const m = archerMul(tribe, army)
+  let cav = 0
+  let all = 0
+  army.forEach((n, i) => {
+    const v = n * units[i].atk * (units[i].archer ? m : 1)
+    all += v
+    if (units[i].kind === 'suvari') cav += v
+  })
+  return all > 0 ? cav / all : 0.5
+}
+
+/** Ordunun, süvari payı `cav` olan bir saldırıya karşı savunması. */
+export function armyDefense(tribe: TribeId, army: number[], cav = 0.5) {
+  const units = UNITS[tribe]
+  const m = archerMul(tribe, army)
+  return army.reduce((s, n, i) => s + n * (units[i].defInf * (1 - cav) + units[i].defCav * cav) * (units[i].archer ? m : 1), 0)
+}
+
+export function cityDefense(g: Game, c: City, cav = 0.5) {
+  const troops = armyDefense(g.player.tribe, c.army, cav) + guestDefense(g, c, g.lastTick, cav)
+  return (troops + (15 + cityPop(c) * 1.5) * BOT_K) * (1 + c.b.sur * 0.06) * (hasBonus(g, 'savunma') ? 1.15 : 1)
+}
+
+/** Botun savunma gücü (forum ölçeği), saldıranın yaya/atlı oranına göre. */
+function botDefenseVs(b: Bot, cav: number) {
+  const army = botArmy(b, (b.def + 15 + b.pop * 1.5) * BOT_K, 'def')
+  const mix = armyDefense(b.tribe, army, cav) / Math.max(1, armyDefense(b.tribe, army, 0.5))
+  return botDefense(b) * BOT_K * (army.some((n) => n > 0) ? mix : 1)
 }
 
 /** botun gücünü gerçekçi bir birlik dağılımına çevirir (raporlarda görünür) */
@@ -476,6 +712,8 @@ export function canFoundCity(g: Game, x: number, y: number): string | null {
     const oy = Math.floor(k / 10000)
     if (dist(ox, oy, x, y) < 3) return 'Başka bir şehre çok yakın. Şehirler arasında en az 3 kare olmalı.'
   }
+  const near = Math.min(...p.cities.map((c) => dist(c.x, c.y, x, y)))
+  if (near > MAX_CITY_GAP) return `Yeni köy en yakın köyünden en fazla ${MAX_CITY_GAP} birim uzakta kurulabilir (şu an ${Math.round(near)}).`
   if (!canAfford(p, cityFoundCost(n))) return 'Köy kurmak için kaynak yetersiz.'
   return null
 }
@@ -492,7 +730,7 @@ export function foundCity(g: Game, x: number, y: number, name: string, now: numb
   if (err) return err
   const p = g.player
   pay(p, cityFoundCost(p.cities.length))
-  const c: City = { id: nid(g), name: name.trim().slice(0, 16) || `şehir${p.cities.length + 1}`, x, y, b: newCityBuildings(), army: emptyArmy(), queue: [], train: [] }
+  const c: City = { id: nid(g), name: name.trim().slice(0, 16) || `şehir${p.cities.length + 1}`, x, y, r: RING_MIN, b: newCityBuildings(), army: emptyArmy(), queue: [], train: [], folk: 10, work: {}, guests: [] }
   p.cities.push(c)
   g.rev++
   addFeed(g, now, '🏕️', `${p.name}, ${x}|${y} koordinatında yeni bir şehir kurdu: ${c.name}`)
@@ -506,9 +744,11 @@ export function renameCity(g: Game, cityId: number, name: string) {
 }
 
 // ---------------- eğitim ----------------
-export function maxTrainable(g: Game, unit: number) {
+/** eğitilecek her asker köyün boştaki köylülerinden biridir */
+export function maxTrainable(g: Game, unit: number, city?: City) {
   const c = unitCost(g.player.tribe, unit)
-  return Math.floor(Math.min(...RES_KEYS.map((k) => (c[k] ? g.player.res[k] / c[k] : Infinity))))
+  const byRes = Math.floor(Math.min(...RES_KEYS.map((k) => (c[k] ? g.player.res[k] / c[k] : Infinity))))
+  return city ? Math.min(byRes, idleFolk(city)) : byRes
 }
 
 export function train(g: Game, cityId: number, unit: number, count: number, now: number): string | null {
@@ -517,10 +757,12 @@ export function train(g: Game, cityId: number, unit: number, count: number, now:
   if (c.b[u.building] < 1) return `${BUILDING_MAP[u.building].name} gerekli`
   count = Math.floor(count)
   if (count < 1) return 'Geçersiz sayı'
+  if (count > idleFolk(c)) return 'Askerlik eğitimi için kullanacağınız yeterli sayıda nüfusunuz bulunmamaktadır.'
   if (count > maxTrainable(g, unit)) return 'Kaynak yetersiz'
   const total = unitCost(g.player.tribe, unit)
   for (const k of RES_KEYS) total[k] *= count
   pay(g.player, total)
+  c.folk -= count
   const same = c.train.filter((t) => t.b === u.building)
   const last = same[same.length - 1]
   const start = last ? last.start + last.count * last.each : now
@@ -562,7 +804,16 @@ export function sendMission(g: Game, cityId: number, type: MissionType, target: 
   const b = g.bots[target]
   if (!b) return 'Hedef bulunamadı'
   const t = b.cities[tc] ?? b.cities[0]
-  if (b.allianceId && b.allianceId === p.allianceId && type !== 'casus') return 'Kendi birliğine saldıramazsın'
+  const ally = !!b.allianceId && b.allianceId === p.allianceId
+  if (type === 'destek') {
+    if (!ally) return 'Destek Gönderilemedi! Sadece aynı birlikte olduğunuz oyunculara destek gönderebilirsiniz!'
+    const ms = travelMs(g, army, dist(c.x, c.y, t.x, t.y))
+    army.forEach((n, i) => (c.army[i] -= n))
+    g.out.push({ id: nid(g), type, cityId: c.id, target, tc, army: [...army], start: now, arrive: now + ms, back: now + ms, returning: false, loot: zeroRes() })
+    return null
+  }
+  if (ally && type !== 'casus') return 'Kendi birliğine saldıramazsın'
+  if (hasBonus(g, 'koruma', now) && type !== 'casus') return 'Koruma bonusu sürerken diğer oyunculara saldıramazsınız.'
   if (p.protectionUntil > now && type !== 'casus') p.protectionUntil = now // saldırı korumayı bitirir
   if (type !== 'casus' && hasPeace(g, target, now)) {
     const th = thread(g, target)
@@ -585,20 +836,136 @@ export function recall(g: Game, id: number, now: number) {
   m.back = now + gone
 }
 
+// ---------------- destekler ----------------
+/** gönderilmiş desteği geri çağırır: ordu yola çıkar, varınca köye katılır */
+export function recallSupport(g: Game, id: number, now: number) {
+  const s = g.supports.find((x) => x.id === id)
+  if (!s) return
+  const c = cityById(g, s.cityId)
+  const t = g.bots[s.target].cities[s.tc] ?? g.bots[s.target].cities[0]
+  const ms = travelMs(g, s.army, dist(c.x, c.y, t.x, t.y))
+  g.supports = g.supports.filter((x) => x !== s)
+  g.out.push({ id: nid(g), type: 'destek', cityId: s.cityId, target: s.target, tc: s.tc, army: s.army, start: now, arrive: now, back: now + ms, returning: true, loot: zeroRes() })
+}
+
+/** köydeki bot desteğini geri gönderir */
+export function sendBackGuest(g: Game, cityId: number, id: number) {
+  const c = cityById(g, cityId)
+  const gu = c.guests.find((x) => x.id === id)
+  if (!gu) return
+  c.guests = c.guests.filter((x) => x !== gu)
+  const b = g.bots[gu.from]
+  b.def += armyDefense(b.tribe, gu.army) / BOT_K
+}
+
+function stationSupport(g: Game, m: Outgoing) {
+  const b = g.bots[m.target]
+  const t = b.cities[m.tc] ?? b.cities[0]
+  g.out = g.out.filter((x) => x !== m)
+  if (b.allianceId !== g.player.allianceId) {
+    // yoldayken birlik dağıldıysa ordu geri döner
+    g.out.push({ ...m, returning: true, back: m.arrive + (m.arrive - m.start) })
+    return
+  }
+  g.supports.push({ id: nid(g), cityId: m.cityId, target: m.target, tc: m.tc, army: m.army, since: m.arrive, defPts: 0 })
+  addReport(g, { time: m.arrive, kind: 'bilgi', title: `Destek ulaştı: ${t.name} (${t.x}|${t.y})`, from: b.id, lines: [`${b.name} oyuncusunun ${t.name} şehrine gönderdiğiniz destek askerleri yerine ulaştı. Askerlerinizi Destekler menüsünden istediğiniz zaman geri çağırabilirsiniz.`] })
+}
+
+/** birlik üyesine konuşlu desteklerin katıldığı savaşlar ve ev sahibinin tahılsızlığı */
+function supportTick(g: Game, t0: number, t1: number) {
+  const p = g.player
+  const hours = ((t1 - t0) / 3600000) * g.speed
+  g.supports ??= []
+  for (const c of p.cities) c.guests ??= []
+  for (const s of [...g.supports]) {
+    const host = g.bots[s.target]
+    const tc = host.cities[s.tc] ?? host.cities[0]
+    const c = cityById(g, s.cityId)
+    if (host.allianceId !== p.allianceId) {
+      recallSupport(g, s.id, t1)
+      continue
+    }
+    // inaktif ev sahibi destekleri beslemez
+    if (host.activity === 0 && Math.random() < 1 - Math.pow(0.97, hours)) {
+      const dead = applyLoss(s.army, rnd(0.03, 0.08))
+      const n = dead.reduce((a, b) => a + b, 0)
+      if (n > 0) {
+        s.army = s.army.map((x, i) => x - dead[i])
+        addReport(g, { time: t1, kind: 'bilgi', title: 'Desteklerin tahılsızlıktan ölüyor', from: host.id, lines: [`Gönderdiğiniz desteklerden ${fmt(n)} asker ${host.name} komutanın köyünde tahılsızlık nedeniyle ölmüştür.`] })
+      }
+    }
+    const chance = 1 - Math.pow(1 - 0.02 * (1 + host.pop / 400), hours)
+    if (Math.random() < chance) {
+      const enemy = randomBot(g, (x) => x.activity > 0 && x.allianceId !== p.allianceId && x.atk > 50, 60)
+      if (enemy) {
+        const cav = cavShare(enemy.tribe, botArmy(enemy, enemy.atk * BOT_K, 'atk'))
+        const sDef = armyDefense(p.tribe, s.army, cav) * (hasBonus(g, 'savunma', t1) ? 1.15 : 1)
+        const def = botDefenseVs(host, cav) + sDef
+        const att = Math.max(enemy.atk * BOT_K * rnd(0.3, 0.8), def * rnd(0.35, 1.3))
+        const { win, attLoss, defLoss } = lossRatios(att, def, Math.random() < 0.6 ? 'yagma' : 'saldiri')
+        const before = [...s.army]
+        const lost = applyLoss(s.army, defLoss)
+        s.army = s.army.map((n, i) => n - lost[i])
+        const pts = Math.round(((att * attLoss) / 10 / BOT_K) * (sDef / Math.max(1, def)))
+        s.defPts += pts
+        p.defPts += pts
+        host.def = Math.max(0, host.def * (1 - defLoss * 0.5))
+        const pct = Math.round((lost.reduce((a, b) => a + b, 0) / Math.max(1, before.reduce((a, b) => a + b, 0))) * 100)
+        addReport(g, {
+          time: t1, kind: 'savunma', win: !win, from: enemy.id,
+          title: `Destek savaşı — ${host.name} · ${tc.name}`,
+          lines: [`${host.name} oyuncusunun ${tc.name} şehrine gönderdiğiniz destek askerlerinin de katıldığı savaştan ${fmt(pts)} savunma puanı kazandınız.Gönderdiğiniz ordunun %${pct} kadarı bu savaşta şehit düşmüştür. Geriye kalan askerlerinizi, ${c.name} şehrinizdeki destek menüsünden istediğiniz zaman geri çağırabilirsiniz.`],
+          battle: {
+            att: sideOfBot(g, enemy, 0, botArmy(enemy, att, 'atk'), applyLoss(botArmy(enemy, att, 'atk'), attLoss)),
+            def: { ...sideOfPlayer(g, c, before, lost), city: tc.name },
+            loot: zeroRes(), atkPts: Math.round((def * defLoss) / 10 / BOT_K), defPts: pts, notes: [],
+          },
+        })
+      }
+    }
+  }
+  g.supports = g.supports.filter((s) => s.army.some((n) => n > 0))
+  // bot destekleri süresi dolunca evine döner
+  for (const c of p.cities) {
+    for (const gu of [...(c.guests ?? [])]) if (gu.until <= t1 || gu.army.every((n) => n <= 0)) sendBackGuest(g, c.id, gu.id)
+  }
+}
+
+/** saldırı yaklaşırken çevrimiçi birlik üyesi destek yollayabilir */
+function maybeAllySupport(g: Game, inc: Incoming, now: number) {
+  const p = g.player
+  if (!p.allianceId || Math.random() > 0.4) return
+  const c = cityById(g, inc.cityId)
+  const b = randomBot(g, (x) => x.allianceId === p.allianceId && x.online && x.def > 200 && dist(x.x, x.y, c.x, c.y) < 40, 80)
+  if (!b) return
+  const power = b.def * rnd(0.12, 0.3) * BOT_K
+  const army = botArmy(b, power, 'def').map((n, i) => (i === SPY ? 0 : n))
+  if (army.every((n) => n <= 0)) return
+  const real = armyDefense(b.tribe, army)
+  b.def = Math.max(0, b.def - real / BOT_K)
+  const arrive = Math.min(inc.arrive - 5000, now + (rnd(0.3, 0.9) * (inc.arrive - now)))
+  c.guests.push({ id: nid(g), from: b.id, army, arrive, until: inc.arrive + (rnd(3, 10) * 3600000) / g.speed, power: real })
+  botDm(g, b, pick(['saldırı geliyor gördüm, destek yolladım', 'köyüne destek gönderdim dayan', 'destek yolda {me}', 'askerlerimi yolladım, savunmana katılacaklar']), now + rnd(4000, 20000), 'support')
+}
+
 // ---------------- birlik ----------------
 export function applyAlliance(g: Game, allianceId: string, now: number) {
   if (g.player.allianceId || g.application) return
   g.application = { allianceId, at: now + rnd(6000, 20000) }
 }
 
-export function foundAlliance(g: Game, name: string, tag: string, now: number) {
-  if (g.player.allianceId) return
+export function foundAlliance(g: Game, name: string, tag: string, now: number): string | null {
+  if (g.player.allianceId) return null
+  if (!g.player.cities.some((c) => c.b.okul > 0)) return 'Önce bir okul kurmalısınız.'
+  if (tag.length < 2 || tag.length > 3) return 'Birlik isimleri 2 veya 3 harfli olmalıdır.'
+  if (g.alliances.some((a) => a.name.toLocaleLowerCase('tr') === name.toLocaleLowerCase('tr'))) return 'Aynı isimde başka bir birlik olduğu için birlik kurma isteğiniz kabul edilmemiştir.'
   const id = 'p' + nid(g)
-  g.alliances.push({ id, name, tag: tag.toUpperCase().slice(0, 4), color: '#ffd24a', umaykut: 0, progress: 0, minPop: 0, playerOwned: true })
+  g.alliances.push({ id, name, tag: tag.toLocaleUpperCase('tr').slice(0, 3), color: '#ffd24a', umaykut: 0, progress: 0, minPop: 0, playerOwned: true })
   g.player.allianceId = id
   g.chat.alliance = []
   addChat(g, 'alliance', { time: now, from: 'Sistem', system: true, text: `${name} birliği kuruldu. Diğer oyuncular zamanla katılabilir.` })
-  addFeed(g, now, '🏕️', `${g.player.name} yeni bir birlik kurdu: ${name} [${tag.toUpperCase()}]`)
+  addFeed(g, now, '🏕️', `${g.player.name} yeni bir birlik kurdu: ${name} [${tag.toLocaleUpperCase('tr')}]`)
+  return null
 }
 
 export function leaveAlliance(g: Game, now: number) {
@@ -669,7 +1036,7 @@ function applyLoss(army: number[], ratio: number) {
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString('tr-TR')
-const BOT_BUILDINGS = ['Ambar', 'Kışla', 'Tarla', 'Taşçı', 'Oduncu', 'Demirci', 'Ahır', 'Pazar']
+const BOT_BUILDINGS = ['Ambar', 'Kışla', 'Tarla', 'Taşçı', 'Keresteci', 'Demirci', 'Ahır', 'Pazar', 'Değirmen', 'Sığınak']
 
 function siegeNotes(rams: number, cats: number, win: boolean, surBefore: number, drop: number, catNote: string | null) {
   const notes: string[] = []
@@ -678,7 +1045,7 @@ function siegeNotes(rams: number, cats: number, win: boolean, surBefore: number,
     else if (surBefore > 0) notes.push('Şehirdeki Sur hasar verildi ancak yapı seviye kaybetmedi')
   }
   if (cats > 0 && catNote) notes.push(catNote)
-  else if (cats > 0 && !win) notes.push('Mancınıklar hedefe ulaşamadı')
+  else if (cats > 0 && !win) notes.push('Toplar hedefe ulaşamadı')
   return notes
 }
 
@@ -690,7 +1057,7 @@ function resolveOutgoing(g: Game, m: Outgoing, now: number) {
   m.returning = true
   if (m.type === 'casus') {
     const noise = () => rnd(0.9, 1.1)
-    const defArmy = botArmy(b, botDefense(b) / (1 + b.sur * 0.06) * 0.8, 'def')
+    const defArmy = botArmy(b, botDefense(b) / (1 + b.sur * 0.06) * 0.8 * BOT_K, 'def')
     const caught = Math.random() < Math.min(0.5, defArmy[SPY] / Math.max(1, m.army[SPY] * 4))
     if (caught) {
       const lost = [...m.army]
@@ -703,7 +1070,7 @@ function resolveOutgoing(g: Game, m: Outgoing, now: number) {
       battle: { att: sideOfPlayer(g, c, m.army, emptyArmy()), def: sideOfBot(g, b, m.tc, defArmy, emptyArmy()), loot: zeroRes(), atkPts: 0, defPts: 0, notes: [] },
       lines: [
         `Sahibi: ${b.name} · ${TRIBES[b.tribe].name} · ${b.cities.length} şehir · Nüfus ${fmt(b.pop)}`,
-        `Tahmini savunma gücü: ~${fmt(botDefense(b) * noise())}`,
+        `Tahmini savunma gücü: ~${fmt(botDefense(b) * BOT_K * noise())}`,
         `Sur seviyesi: ${b.sur}`,
         `Depodaki tahmini kaynak: ~${fmt(b.res * noise())}`,
         b.activity === 0 ? 'Şehir çok sessiz, uzun süredir kimse ilgilenmiyor gibi. (inaktif olabilir)' : b.online ? 'Şehrin sahibi şu an çevrimiçi!' : 'Şehirde hareketlilik var.',
@@ -711,18 +1078,19 @@ function resolveOutgoing(g: Game, m: Outgoing, now: number) {
     })
     return
   }
-  const type = m.type
+  const type = m.type as 'yagma' | 'saldiri'
   const sent = [...m.army]
-  const att = attackPower(p.tribe, m.army) * (p.tribe === 'hun' ? 1 + 0.15 * (m.army.slice(5, 8).reduce((s, n) => s + n, 0) / Math.max(1, m.army.reduce((s, n) => s + n, 0))) : 1)
-  const def = botDefense(b) * rnd(0.95, 1.05)
+  const att = attackPower(p.tribe, m.army) * (hasBonus(g, 'saldiri', m.arrive) ? 1.15 : 1)
+  const cav = cavShare(p.tribe, m.army)
+  const def = botDefenseVs(b, cav) * rnd(0.95, 1.05)
   const { win, attLoss, defLoss } = lossRatios(att, def, type)
-  const defArmy = botArmy(b, (b.def + 15 + b.pop * 1.5), 'def')
+  const defArmy = botArmy(b, (b.def + 15 + b.pop * 1.5) * BOT_K, 'def')
   const defLost = applyLoss(defArmy, defLoss)
   const lost = applyLoss(m.army, attLoss)
   m.army = m.army.map((n, i) => n - lost[i])
-  const defBefore = botDefense(b)
+  const defBefore = def / BOT_K
   b.def = Math.max(0, b.def * (1 - defLoss))
-  b.defPts += (att * attLoss) / 100
+  b.defPts += (att * attLoss) / 100 / BOT_K
   const survivors = m.army.reduce((s, n) => s + n, 0)
   if (win && survivors > 0) {
     const units = UNITS[p.tribe]
@@ -754,7 +1122,7 @@ function resolveOutgoing(g: Game, m: Outgoing, now: number) {
   }
   const killed = defBefore * defLoss
   const atkPts = Math.round(killed / 10)
-  const defPts = Math.round((att * attLoss) / 10)
+  const defPts = Math.round((att * attLoss) / 10 / BOT_K)
   p.raidPts += atkPts
   if (win) p.elmas += Math.random() < 0.15 ? 1 : 0
   const title = `${MISSION_NAME[type]}: ${tcity.name} (${tcity.x}|${tcity.y}) — ${win ? 'Zafer' : 'Yenilgi'}`
@@ -768,7 +1136,7 @@ function resolveOutgoing(g: Game, m: Outgoing, now: number) {
 
   // tepki
   if (b.activity > 0) {
-    if (b.aggr > 0.35 && b.atk > att * 0.3) {
+    if (b.aggr > 0.35 && b.atk > (att / BOT_K) * 0.3) {
       b.grudge = now + (rnd(2, 10) * 60000) / g.speed
       const th = thread(g, b.id)
       th.mood = Math.max(-1, th.mood - 0.4)
@@ -810,15 +1178,18 @@ function launchBotAttack(g: Game, b: Bot, now: number, revenge: boolean) {
   const target = nearestCity(g, b.x, b.y)
   const d = dist(target.x, target.y, b.x, b.y)
   const speed = rnd(3, 7.5)
-  const power = b.atk * rnd(0.35, 0.85)
-  if (power < 20 || hasPeace(g, b.id, now)) return
+  const raw = b.atk * rnd(0.35, 0.85)
+  if (raw < 20 || hasPeace(g, b.id, now)) return
+  const power = raw * BOT_K
   const travel = Math.max(30000, (d / speed) * 60000) / g.speed
-  const army = botArmy(b, power, 'atk', power > 3000 && Math.random() < 0.5)
-  g.incoming.push({ id: nid(g), from: b.id, fc: 0, cityId: target.id, power, army, launch: now, arrive: now + travel })
+  const army = botArmy(b, power, 'atk', raw > 3000 && Math.random() < 0.5)
+  const inc: Incoming = { id: nid(g), from: b.id, fc: 0, cityId: target.id, power, army, launch: now, arrive: now + travel }
+  g.incoming.push(inc)
+  maybeAllySupport(g, inc, now)
   g.player.hits = [...(g.player.hits ?? []), now]
   b.nextRaid = now + (rnd(8, 20) * 3600 * 1000) / g.speed
   if (revenge && Math.random() < 0.5) botDm(g, b, pick(['ordum yolda 😈', 'hazırlan', 'geliyorum {me}', 'sırada sen varsın']), now + rnd(5000, 30000), 'threat')
-  b.atk -= power * 0.3
+  b.atk -= raw * 0.3
   if (revenge) b.grudge = 0
 }
 
@@ -826,26 +1197,38 @@ function resolveIncoming(g: Game, inc: Incoming) {
   const p = g.player
   const b = g.bots[inc.from]
   const c = cityById(g, inc.cityId)
-  const def = cityDefense(g, c) * (p.tribe === 'gokturk' ? 1.15 : p.tribe === 'hun' ? 0.9 : 1)
+  const def = cityDefense(g, c, cavShare(b.tribe, inc.army))
   const { win, attLoss, defLoss } = lossRatios(inc.power, def, 'yagma')
+  const pw = inc.power / BOT_K
   const lost = applyLoss(c.army, defLoss)
   const armyBefore = [...c.army]
   c.army = c.army.map((n, i) => n - lost[i])
   const attLost = applyLoss(inc.army, attLoss)
-  b.atk = Math.max(0, b.atk - inc.power * attLoss)
+  b.atk = Math.max(0, b.atk - pw * attLoss)
   const loot = zeroRes()
   const notes: string[] = []
+  for (const gu of activeGuests(c, inc.arrive)) {
+    const gl = applyLoss(gu.army, defLoss)
+    const n = gl.reduce((s, x) => s + x, 0)
+    gu.army = gu.army.map((x, i) => x - gl[i])
+    const hb = g.bots[gu.from]
+    hb.defPts += Math.round((pw * attLoss) / 20)
+    notes.push(`${hb.name} oyuncusunun destek askerleri savaşa katıldı${n ? `, ${fmt(n)} asker şehit düştü` : ''}`)
+  }
   if (win) {
-    const carry = inc.power * 0.9
+    if (safeNote(g, inc.arrive)) notes.push(safeNote(g, inc.arrive)!)
+    const carry = pw * 0.9
     const keys: (keyof Res)[] = ['tas', 'odun', 'tahil', 'demir', 'altin']
-    const have = keys.reduce((s, k) => s + p.res[k] * 0.35, 0)
+    const safe = shelterCap(g, inc.arrive)
+    const open = (k: keyof Res) => Math.max(0, p.res[k] - safe) * 0.35
+    const have = keys.reduce((s, k) => s + open(k), 0)
     const take = Math.min(carry, have)
     for (const k of keys) {
-      loot[k] = have > 0 ? Math.floor(((p.res[k] * 0.35) / have) * take) : 0
+      loot[k] = have > 0 ? Math.floor((open(k) / have) * take) : 0
       p.res[k] -= loot[k]
     }
     b.res += take
-    b.raidPts += (inc.power * defLoss) / 100
+    b.raidPts += (pw * defLoss) / 100
     const rams = inc.army[RAM] - attLost[RAM]
     if (rams > 0) {
       const before = c.b.sur
@@ -854,14 +1237,14 @@ function resolveIncoming(g: Game, inc: Incoming) {
       notes.push(...siegeNotes(rams, 0, true, before, drop, null))
     }
   } else {
-    p.defPts += Math.round((inc.power * attLoss) / 10)
+    p.defPts += Math.round((pw * attLoss) / 10)
   }
   addReport(g, {
     time: inc.arrive, kind: 'savunma', title: `${win ? `${c.name} yağmalandı` : 'Saldırı püskürtüldü'} — ${b.name}`, win: !win, from: b.id, lines: [],
     battle: {
       att: sideOfBot(g, b, inc.fc, inc.army, attLost),
       def: sideOfPlayer(g, c, armyBefore, lost),
-      loot, atkPts: Math.round((def * defLoss) / 10), defPts: Math.round((inc.power * attLoss) / 10), notes,
+      loot, atkPts: Math.round((def * defLoss) / 10 / BOT_K), defPts: Math.round((pw * attLoss) / 10), notes,
     },
   })
   if (!win) addFeed(g, inc.arrive, '🛡️', `${p.name}, ${b.name} adlı oyuncunun saldırısını püskürttü`)
@@ -904,7 +1287,7 @@ function botExpand(g: Game, b: Bot, now: number, quiet: boolean) {
     }
     if (!ok) continue
     const name = b.cities.length < 3 ? `${b.cities[0].name}${b.cities.length + 1}` : pick(['Kale', 'Hisar', 'çiftlik', 'depo', 'asker', 'yedek', 'XI', 'TÜRK' + b.cities.length])
-    b.cities.push({ x, y, name })
+    b.cities.push({ x, y, name, r: RING_MIN })
     g.rev++
     if (!quiet) addFeed(g, now, '🏕️', `${b.name}, ${x}|${y} koordinatında yeni bir şehir kurdu`)
     return
@@ -930,6 +1313,8 @@ function simulateBots(g: Game, dtReal: number, now: number, quiet: boolean) {
     }
     if (Math.random() < toggle) b.online = b.activity > 0 && Math.random() < b.activity * 0.55 * dayFactor
     if (b.online) { online++; b.lastSeen = now }
+    const grow = (RING_DAY * dt * (b.activity > 0 ? 1.2 : 0.6) * (b.tribe === 'gokturk' ? 1.25 : 1)) / 86400
+    for (const c of b.cities) if ((c.r ?? RING_MAX) < RING_MAX) c.r = Math.min(RING_MAX, (c.r ?? RING_MAX) + grow)
   }
   g.online = online + 1
 
@@ -1080,13 +1465,26 @@ function step(g: Game, t0: number, t1: number, quiet: boolean) {
   }
   if (p.res.tahil <= 0 && r.tahil < 0) {
     p.starveAcc += -r.tahil * dtMin
+    const guestDead = new Map<number, number>()
     while (p.starveAcc > 5) {
+      const gc = p.cities.find((x) => activeGuests(x, t1).some((gu) => gu.army.some((n) => n > 0)))
+      if (gc && Math.random() < 0.5) {
+        const gu = activeGuests(gc, t1).find((x) => x.army.some((n) => n > 0))!
+        const i = gu.army.findIndex((n) => n > 0)
+        gu.army[i]--
+        guestDead.set(gu.from, (guestDead.get(gu.from) ?? 0) + 1)
+        p.starveAcc -= UNITS[g.bots[gu.from].tribe][i].upkeep * 50
+        continue
+      }
       const city = p.cities.find((x) => x.army.some((n) => n > 0))
       if (!city) { p.starveAcc = 0; break }
       const i = city.army.findIndex((n) => n > 0)
       city.army[i]--
       p.starveAcc -= UNITS[p.tribe][i].upkeep * 50
       if (Math.random() < 0.05) addReport(g, { time: t1, kind: 'bilgi', title: 'Askerlerin açlıktan dağılıyor!', lines: ['Tahıl üretimin ordunu beslemeye yetmiyor. Tarlayı yükselt ya da asker sayını azalt.'] })
+    }
+    for (const [from, n] of guestDead) {
+      addReport(g, { time: t1, kind: 'bilgi', title: 'Destek askerleri tahılsızlıktan öldü', from, lines: [`Köyünüzde bulunan destek askerlerinden ${fmt(n)} asker tahılsızlık nedeniyle ölmüştür.Desteği gönderen ${g.bots[from].name}.`] })
     }
   }
 
@@ -1098,6 +1496,19 @@ function step(g: Game, t0: number, t1: number, quiet: boolean) {
   }
 
   for (const city of p.cities) {
+    city.folk = Math.min(Math.max(city.folk, folkCap(city)), city.folk + folkGrowth(g, city) * dtMin)
+    if (city.folk > folkCap(city)) city.folk = Math.max(folkCap(city), city.folk - dtMin)
+    fixWork(g, city)
+    if (city.r < RING_MAX) {
+      const before = city.r
+      city.r = Math.min(RING_MAX, city.r + (ringGrowthPerDay(g, city) * (t1 - t0)) / 86400000)
+      if (Math.floor(before * 2) !== Math.floor(city.r * 2)) {
+        g.rev++
+        const full = city.r >= RING_MAX
+        addFeed(g, t1, '⭕', `${city.name} köyünün çemberi ${full ? 'en geniş haline ulaştı' : 'genişledi'}: ${city.r.toFixed(1).replace('.', ',')} birim`)
+        if (!quiet) addReport(g, { time: t1, kind: 'bilgi', title: `${city.name}: köy çemberi genişledi`, lines: [`Çember ${city.r.toFixed(1).replace('.', ',')} birime ulaştı${full ? ' (en geniş hali).' : '.'} Çemberin içine giren kaynaklara artık işçi gönderebilirsin.`] })
+      }
+    }
     while (city.queue.length && city.queue[0].end <= t1) {
       const j = city.queue.shift()!
       city.b[j.b] = j.to
@@ -1114,17 +1525,22 @@ function step(g: Game, t0: number, t1: number, quiet: boolean) {
   }
 
   for (const m of [...g.out]) {
-    if (!m.returning && m.arrive <= t1) resolveOutgoing(g, m, m.arrive)
+    if (!m.returning && m.arrive <= t1) {
+      if (m.type === 'destek') { stationSupport(g, m); continue }
+      resolveOutgoing(g, m, m.arrive)
+    }
     if (m.returning && m.back <= t1) {
       const home = cityById(g, m.cityId)
       const survivors = m.army.reduce((s, n) => s + n, 0)
       m.army.forEach((n, i) => (home.army[i] += n))
       for (const k of RES_KEYS) p.res[k] += m.loot[k]
       g.out = g.out.filter((x) => x !== m)
-      if (survivors > 0 && m.type !== 'casus' && RES_KEYS.some((k) => m.loot[k] > 0)) addFeed(g, m.back, '🐎', `Ordun ganimetle ${home.name} şehrine döndü`)
+      if (survivors > 0 && m.type !== 'casus' && m.type !== 'destek' && RES_KEYS.some((k) => m.loot[k] > 0)) addFeed(g, m.back, '🐎', `Ordun ganimetle ${home.name} şehrine döndü`)
     }
   }
   g.out = g.out.filter((m) => !(m.returning && m.army.every((n) => n === 0)))
+  supportTick(g, t0, t1)
+  bonusTick(g, t1)
 
   for (const inc of [...g.incoming]) {
     if (inc.arrive <= t1) {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { TRIBES } from '../game/data'
-import { sendChat } from '../game/engine'
+import { type ChatMsg, allianceOf, sendChat } from '../game/engine'
 import { useG } from '../ctx'
 import { fmtAgo, fmtClock } from '../format'
 
@@ -19,6 +19,12 @@ export default function ChatPanel({ ch, setCh, onClose }: { ch: Channel; setCh: 
     if (el) el.scrollTop = el.scrollHeight
   }, [last, ch, typers.length])
 
+  const chatTag = (m: ChatMsg) => {
+    const id = m.me ? g.player.allianceId : m.botId !== undefined ? g.bots[m.botId]?.allianceId : null
+    const t = allianceOf(g, id ?? null)?.tag
+    return t ? `[${t}]` : ''
+  }
+
   const send = () => {
     if (!text.trim() || ch === 'feed') return
     act((g, n) => sendChat(g, ch, text, n))
@@ -29,9 +35,9 @@ export default function ChatPanel({ ch, setCh, onClose }: { ch: Channel; setCh: 
     <div className="chat-drawer panel">
       <button className="win-x" onClick={onClose} aria-label="Kapat">✕</button>
       <div className="seg">
-        <button className={ch === 'world' ? 'active' : ''} onClick={() => setCh('world')}>🌍 Dünya</button>
-        <button className={ch === 'alliance' ? 'active' : ''} onClick={() => setCh('alliance')} disabled={!g.player.allianceId}>🐺 Birlik</button>
-        <button className={ch === 'feed' ? 'active' : ''} onClick={() => setCh('feed')}>📯 Olaylar</button>
+        <button className={ch === 'world' ? 'active' : ''} onClick={() => setCh('world')}>GENEL</button>
+        <button className={ch === 'alliance' ? 'active' : ''} onClick={() => setCh('alliance')} disabled={!g.player.allianceId}>BİRLİK</button>
+        <button className={ch === 'feed' ? 'active' : ''} onClick={() => setCh('feed')}>OLAYLAR</button>
       </div>
       {ch === 'feed' ? (
         <div className="chat-box feed">
@@ -50,10 +56,10 @@ export default function ChatPanel({ ch, setCh, onClose }: { ch: Channel; setCh: 
                 {!m.system && (
                   <button
                     className="link name"
-                    style={{ color: m.tribe ? TRIBES[m.tribe].color : undefined }}
+                    title={m.tribe ? TRIBES[m.tribe].name : undefined}
                     onClick={() => m.botId !== undefined && open({ w: 'oyuncu', id: m.botId })}
                   >
-                    {m.from}:
+                    {chatTag(m)}{m.from} :
                   </button>
                 )}{' '}
                 <span>{m.text}</span>

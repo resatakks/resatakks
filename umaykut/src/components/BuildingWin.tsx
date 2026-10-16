@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import {
-  BUILDING_MAP, type BuildingId, MINE_NAME, RES_INFO, RES_KEYS, type ResKey, type TrainBuilding, UNITS,
+  BUILDING_MAP, type BuildingId, MINE_NAME, RES_INFO, RES_KEYS, RING_MAX, RING_OKUL, type ResKey, type TrainBuilding, UNITS,
 } from '../game/data'
 import {
-  buildCost, buildTime, canBuild, build, cityById, cityDefense, cityRates, marketRate, maxTrainable, mineFactor, minesNear, prodPerMin,
-  renameCity, storageCap, trade, train, trainTime, unitCost,
+  buildCost, buildTime, canBuild, build, cityById, cityDefense, buildingMult, cityRates, idleFolk, marketRate, maxTrainable, minesNear, workersOn,
+  renameCity, ringGrowthPerDay, storageCap, trade, train, trainTime, unitCost,
 } from '../game/engine'
 import { useG } from '../ctx'
 import { fmt, fmtDur } from '../format'
+import { BuildingPic, UnitArt } from './cityart'
 import { Cost, Window } from './ui'
 
 const TRAIN: TrainBuilding[] = ['kisla', 'okcu', 'ahir', 'atolye']
@@ -25,8 +26,11 @@ export default function BuildingWin({ id }: { id: BuildingId }) {
   return (
     <Window title={`${def.name}${lvl ? ` · Seviye ${lvl}` : ''}`} wide={TRAIN.includes(id as TrainBuilding) || id === 'pazar'}>
       <div className="bwin-head">
-        <span className="bwin-icon">{def.icon}</span>
-        <p>{def.desc}</p>
+        <div className="bwin-pic"><BuildingPic tribe={g.player.tribe} id={id} lvl={lvl} /></div>
+        <div>
+          <h6 className="lbl">Açıklama</h6>
+          <p>{def.desc}</p>
+        </div>
       </div>
 
       <Info id={id} />
@@ -66,22 +70,21 @@ function Info({ id }: { id: BuildingId }) {
 
   if (def.produces) {
     const type = def.produces
-    const mines = minesNear(g, c.x, c.y, type)
-    const f = mineFactor(g, c, type)
-    const bonus = g.player.tribe === 'gokturk' ? 1.15 : 1
+    const mines = minesNear(g, c.x, c.y, type, c.r)
     const cur = cityRates(g, c)[type] * hour
-    const next = (3 + prodPerMin(lvl + 1) * f) * bonus * hour
+    const w = workersOn(g, c, type)
     return (
       <section className="stone">
         <table className="kv">
           <tbody>
-            <tr><td>Şu anki üretim</td><td><b>{fmt(cur)}</b> {RES_INFO[type].name} / saat</td></tr>
-            {lvl < def.max && <tr><td>Sonraki seviye</td><td>{fmt(next)} / saat</td></tr>}
-            <tr><td>Çevredeki {MINE_NAME[type]}</td><td>{mines.length ? mines.map((m) => `Sv.${m.m.level}`).join(' · ') : 'yok'}</td></tr>
-            <tr><td>Maden etkisi</td><td>×{f.toFixed(2)}</td></tr>
+            <tr><td>Saatlik üretim</td><td><b>{fmt(cur)}</b> {RES_INFO[type].name}</td></tr>
+            <tr><td>Üretim artışı</td><td>+%{Math.round((buildingMult(lvl) - 1) * 100)}{lvl < def.max ? ` (sonraki seviye +%${Math.round((buildingMult(lvl + 1) - 1) * 100)})` : ''}</td></tr>
+            <tr><td>Kaynaklardaki işçi</td><td>{fmt(w)} · boşta {fmt(idleFolk(c))}</td></tr>
+            <tr><td>Çember içindeki {MINE_NAME[type]}</td><td>{mines.length ? mines.map((m) => `Sv.${m.m.level}`).join(' · ') : 'yok'}</td></tr>
           </tbody>
         </table>
-        {!mines.length && <p className="muted small">Bu şehrin çevresinde {MINE_NAME[type].toLowerCase()} yok; üretim düşük kalır. Yeni şehri madenlerin yanına kur.</p>}
+        {!mines.length && <p className="muted small">Şehrin {MINE_NAME[type].toLowerCase()} kaynağı yoksa bu bina yararsızdır. Çember her gün genişler, Okul bu büyümeyi hızlandırır.</p>}
+        {mines.length > 0 && !w && <p className="muted small">Kaynaklarda hiç işçi çalışmıyor. Haritada kaynağa tıklayıp işçi gönderin.</p>}
       </section>
     )
   }
@@ -101,9 +104,40 @@ function Info({ id }: { id: BuildingId }) {
       <section className="stone">
         <table className="kv"><tbody>
           <tr><td>Savunma bonusu</td><td><b>+%{lvl * 6}</b></td></tr>
-          <tr><td>Şehir savunma gücü</td><td>{fmt(cityDefense(g, c))}</td></tr>
+          <tr><td>Yayaya karşı savunma</td><td>{fmt(cityDefense(g, c, 0))}</td></tr>
+          <tr><td>Atlıya karşı savunma</td><td>{fmt(cityDefense(g, c, 1))}</td></tr>
         </tbody></table>
-        <p className="muted small">Düşman koçbaşıları Sur seviyesini düşürebilir.</p>
+        <p className="muted small">Düşman mancınıkları Sur seviyesini düşürebilir.</p>
+      </section>
+    )
+  }
+  const ringRows = (
+    <>
+      <tr><td>Köy çemberi</td><td><b>{c.r.toFixed(2).replace('.', ',')}</b> / {RING_MAX.toString().replace('.', ',')} birim</td></tr>
+      <tr><td>Günlük genişleme</td><td>{c.r >= RING_MAX ? 'en geniş hali' : `+${ringGrowthPerDay(g, c).toFixed(2).replace('.', ',')} birim · dolmasına ${fmtDur(((RING_MAX - c.r) / ringGrowthPerDay(g, c)) * 86400000)}`}</td></tr>
+    </>
+  )
+  if (id === 'okul') {
+    return (
+      <section className="stone">
+        <table className="kv"><tbody>
+          {ringRows}
+          <tr><td>Okul etkisi</td><td>+%{Math.round(lvl * RING_OKUL * 100)} büyüme hızı</td></tr>
+          {lvl < def.max && <tr><td>Sonraki seviye</td><td>+%{Math.round((lvl + 1) * RING_OKUL * 100)}</td></tr>}
+          <tr><td>Birlik kapasitesine katkı</td><td>+{lvl * 3} üye</td></tr>
+        </tbody></table>
+        <p className="muted small">Her Okul yalnız bulunduğu köyün çemberini etkiler.</p>
+      </section>
+    )
+  }
+  if (id === 'tapinak') {
+    return (
+      <section className="stone">
+        <table className="kv"><tbody>
+          <tr><td>Nüfus artışı</td><td><b>+%{lvl * 5}</b></td></tr>
+          <tr><td>Sonraki seviye</td><td>+%{Math.min(10, lvl + 1) * 5}</td></tr>
+        </tbody></table>
+        <p className="muted small">Tapınaklar şehirde zamanla oluşan yeni nüfusun daha hızlı artmasını sağlar. Okul için en az 1. seviye Tapınak gerekir.</p>
       </section>
     )
   }
@@ -111,6 +145,7 @@ function Info({ id }: { id: BuildingId }) {
     return (
       <section className="stone">
         <table className="kv"><tbody>
+          {ringRows}
           <tr><td>İnşaat hızı</td><td>−%{Math.round((1 - Math.pow(0.95, lvl - 1)) * 100)}</td></tr>
           <tr><td>Koordinat</td><td>{c.x}|{c.y}</td></tr>
         </tbody></table>
@@ -137,18 +172,19 @@ function TrainPanel({ b }: { b: TrainBuilding }) {
       <h5>Asker eğit</h5>
       <table className="train">
         <thead>
-          <tr><th>Birim</th><th>⚔️</th><th>🛡️</th><th>🏃</th><th>🎒</th><th>Bedel</th><th>Şehirde</th><th /></tr>
+          <tr><th>Birim</th><th title="Saldırı">Saldırı</th><th title="Yayaya karşı savunma">Yayaya Sav.</th><th title="Atlıya karşı savunma">Atlıya Sav.</th><th title="Hız">Hız</th><th title="Yağma (taşıma)">Yağma</th><th>Bedel</th><th>Şehirde</th><th /></tr>
         </thead>
         <tbody>
           {list.map(({ u, i }) => {
-            const max = maxTrainable(g, i)
+            const max = maxTrainable(g, i, c)
             const v = counts[i] ?? ''
             return (
               <tr key={i}>
-                <td><span className="u-icon">{u.icon}</span> <b>{u.name}</b><br /><small className="muted">⏱ {fmtDur(trainTime(g, c, i))}</small></td>
-                <td>{u.atk}</td>
-                <td>{u.def}</td>
-                <td>{u.speed}</td>
+                <td><span className="u-icon"><UnitArt tribe={g.player.tribe} i={i} /></span> <b>{u.name}</b><br /><small className="muted">⏱ {fmtDur(trainTime(g, c, i))}</small></td>
+                <td>{u.atk}{u.archer && <small className="muted" title="Yanında yakın dövüş askeri varsa 2 kat etkili"> ×2</small>}</td>
+                <td>{u.defInf}</td>
+                <td>{u.defCav}</td>
+                <td>{u.spd}</td>
                 <td>{u.carry}</td>
                 <td><Cost c={unitCost(g.player.tribe, i)} have={g.player.res} /></td>
                 <td>{fmt(c.army[i])}</td>
