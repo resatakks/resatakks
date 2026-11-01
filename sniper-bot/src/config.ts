@@ -61,6 +61,13 @@ export interface Config {
     max_sync_trade_pct?: number;
     max_sync_repeat_wallets?: number; // sync_swarm: trade% ≥ max_sync_trade_pct VE repeat ≥ bu
     max_sync_rug_link_pct?: number; // senkron grubun ≥ bu %'si başka rug'larda da senkron → ele
+    sync_entry_sec?: number; // izlenen cüzdanlar bu kadar sn içinde aynı token'a girerse tek giriş sayılır (smart_sync)
+    max_launchpad_dump_pct?: number; // launchpad'in geçmiş erken dump/rug oranı ≥ bu → trap skoru ağır ceza
+    funding_max_wallets?: number; // fonlayıcısı aranan erken alıcı (RPC/Etherscan maliyeti)
+    fresh_wallet_hours?: number;
+    max_common_funder_pct?: number; // funding_cluster: erken alıcıların ≥ bu %'si aynı cüzdandan fonlanmış → ele
+    max_fund_dev_pct?: number; // dev'in fonladığı erken alıcı ≥ bu % → ele
+    max_fresh_wallet_pct?: number; // taze cüzdan ≥ bu % VE ortak fonlayıcı ≥ %20 → ele
     wash_unknown_pass: boolean;
     early_dump_window_min: number;
     max_early_dump_pct: number;
@@ -161,6 +168,13 @@ cfg.filters.sync_repeat_min ??= 3;
 cfg.filters.max_sync_trade_pct ??= 55;
 cfg.filters.max_sync_repeat_wallets ??= 3;
 cfg.filters.max_sync_rug_link_pct ??= 25;
+cfg.filters.sync_entry_sec ??= 3;
+cfg.filters.max_launchpad_dump_pct ??= 60;
+cfg.filters.funding_max_wallets ??= 12;
+cfg.filters.fresh_wallet_hours ??= 48;
+cfg.filters.max_common_funder_pct ??= 30;
+cfg.filters.max_fund_dev_pct ??= 10;
+cfg.filters.max_fresh_wallet_pct ??= 60;
 cfg.risk.auto_scale ??= false;
 cfg.risk.min_scale ??= 0.25;
 

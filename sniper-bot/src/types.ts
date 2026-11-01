@@ -52,6 +52,14 @@ export interface Metrics extends Security {
   syncMaxWallets?: number | null; // tek blokta en fazla farklı cüzdan
   syncRepeatWallets?: number | null; // defalarca birlikte senkron işlem yapan cüzdan sayısı
   syncRugLinkPct?: number | null; // senkron gruptan, başka rug token'larında da senkron görülenlerin %
+  smartEffective?: number | null; // aynı anda (≤ sync_entry_sec) giren izlenen cüzdanlar tek sayılınca bağımsız giriş
+  smartSynced?: string[]; // aynı anda giren izlenen cüzdan etiketleri
+  launchpadDumpPct?: number | null; // bu ağ+launchpad'den son 14g adayların erken dump/rug oranı
+  fundChecked?: number | null; // fonlayıcısı çıkarılan erken alıcı sayısı
+  fundFreshPct?: number | null; // ilk işlemi fresh_wallet_hours içinde olan erken alıcı %
+  fundCommonPct?: number | null; // en büyük ortak-fonlayıcı grubu / kontrol edilen erken alıcı %
+  fundDevPct?: number | null; // doğrudan dev'in fonladığı erken alıcı %
+  fundPrevRugs?: number | null; // ortak fonlayıcının erken alıcı fonladığı, rug olmuş başka token sayısı
   smartWallets: string[];
   kolWallets: string[];
   holders0: number | null;

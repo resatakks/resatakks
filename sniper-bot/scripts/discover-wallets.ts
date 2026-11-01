@@ -1,7 +1,7 @@
 // Kendi verinden smart-money aday cüzdan çıkarır: kazanan token'larda erken top-holder olup
 // rug'larda görünmeyen adresler. Yalnız botun KENDİ kayıtları (early_buyers/candidates/outcomes.jsonl) kullanılır;
 // hazır/dış cüzdan listesi yok. Çıktı ÖNERİDİR; wallets.yaml'a eklemeden önce Solscan/BscScan/Basescan'de elle doğrula.
-// Otomatik eleme: rug oranı > %35, win rate < %42, sniper bot (aynı token'da > 3 erken alım),
+// Otomatik eleme: rug oranı > %35, win rate < %42, sniper bot (aynı token'da > 3 erken alım), halka üyesi (senkron/fonlama/wash/rug kümesi/dev-sniper, skordan bağımsız),
 // tuzak şüphe skoru ≥ filters.suspect_wallet_score (trap.ts: rug ortağı, smart-money tuzağı, dev+sniper hibrit, seri dev, wash halkası, rug kümesi).
 // Sniper botlar data/sniper-bots.json'a, tüm şüpheliler data/suspect-wallets.json'a yazılır.
 // Kullanım: npm run discover-wallets            (en az ~1 hafta candidates + outcomes verisi gerekir)
@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { CHAINS, DATA_DIR, cfg, isEvm, normAddr, wallets, type Chain, type EvmChain } from '../src/config.js';
 import { EVM } from '../src/chains.js';
-import { suspects, suspicionOf, type SuspectKind } from '../src/trap.js';
+import { suspectOf, suspects, type SuspectKind } from '../src/trap.js';
 import { readJsonl, utcDay } from '../src/util.js';
 
 const WIN_MAX_PCT = 100; // 6 saatte en az 2x
@@ -73,14 +73,17 @@ for (const c of readJsonl<any>('candidates.jsonl')) {
 }
 
 // Çok sık görünen adresler genelde bot/aggregator/CEX'tir → seen tavanı ve rug cezası.
-const eliminated = { rug: 0, winRate: 0, bot: 0, trap: 0 };
+const RING: SuspectKind[] = ['sync_ring', 'funder_ring', 'wash_ring', 'rug_cluster', 'dev_sniper'];
+const eliminated = { rug: 0, winRate: 0, bot: 0, trap: 0, ring: 0 };
 const ranked = [...stats.values()]
   .filter((s) => s.wins >= MIN_WINS && !known.has(s.address.toLowerCase()) && s.seen <= 200)
   .filter((s) => {
     if (s.rugs / s.seen > MAX_RUG_RATE) return void eliminated.rug++, false;
     if (s.wins / s.seen < MIN_WIN_RATE) return void eliminated.winRate++, false;
     if (isBot(s.chain, s.address)) return void eliminated.bot++, false;
-    if (suspicionOf(s.chain, s.address) >= MAX_SUSPICION) return void eliminated.trap++, false;
+    const sp = suspectOf(s.chain, s.address);
+    if (sp && sp.kinds.some((k) => RING.includes(k))) return void eliminated.ring++, false; // halka üyesi = skor düşük olsa da takip edilmez
+    if ((sp?.score ?? 0) >= MAX_SUSPICION) return void eliminated.trap++, false;
     return true;
   })
   .map((s) => ({ ...s, score: (s.wins - 2 * s.rugs) * Math.log1p(s.sumMax / s.wins) * (s.wins / s.seen) }))
@@ -97,14 +100,24 @@ const KINDS: [SuspectKind, string][] = [
   ['wash_ring', 'Wash trading halkası'],
   ['rug_cluster', "Rug kümesi (aynı grup birden fazla rug'da)"],
   ['sync_ring', 'Senkron halka (aynı blokta birlikte işlem, ≥2 token)'],
+  ['funder_ring', 'Fonlayıcı halkası (≥2 token\'da erken alıcıları fonlayan cüzdan)'],
   ['sniper_bot', 'Sniper bot'],
 ];
+function syncPairs(): string[] {
+  const pairs = new Map<string, Set<string>>();
+  for (const g of readJsonl<any>('smart_sync.jsonl')) {
+    const ls = [...new Set<string>(g.labels ?? [])].sort();
+    for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++) (pairs.get(`${ls[i]} + ${ls[j]}`) ?? pairs.set(`${ls[i]} + ${ls[j]}`, new Set()).get(`${ls[i]} + ${ls[j]}`)!).add(`${g.chain}:${g.token}`);
+  }
+  const xs = [...pairs].filter(([, t]) => t.size >= 2).sort((a, b) => b[1].size - a[1].size).slice(0, 20);
+  return xs.length ? xs.map(([p, t]) => `- ${p} · ${t.size} token'da aynı anda`) : ['- yok (≥2 token gerekir)'];
+}
 const explorer = (chain: string, a: string) =>
   isEvm(chain as Chain) ? `${EVM[chain as EvmChain].explorer}/address/${a}` : `https://solscan.io/account/${a}`;
 const lines = [
   `# Aday cüzdanlar ${utcDay()} — ${done.size} token, ${outcomes.size} sonuç`,
   `kriter: ≥${MIN_WINS} kazanan (max ≥ +${WIN_MAX_PCT}%), rug oranı ≤ %${MAX_RUG_RATE * 100}, win rate ≥ %${MIN_WIN_RATE * 100}, sniper bot değil, şüphe skoru < ${MAX_SUSPICION}, zaten izlenenler hariç`,
-  `elenen: rug oranı ${eliminated.rug} · düşük win rate ${eliminated.winRate} · sniper bot ${eliminated.bot} · tuzak şüphesi ${eliminated.trap}`,
+  `elenen: rug oranı ${eliminated.rug} · düşük win rate ${eliminated.winRate} · sniper bot ${eliminated.bot} · tuzak şüphesi ${eliminated.trap} · halka üyesi (senkron/fonlama/wash/rug kümesi/dev-sniper) ${eliminated.ring}`,
   '',
   ...ranked.map(
     (s) =>
@@ -116,6 +129,9 @@ const lines = [
     .sort((a, b) => b.tokens - a.tokens)
     .slice(0, 50)
     .map((b) => `- ${b.chain} ${b.address} · ${b.tokens} token · max ${b.maxBuys} erken alım · ${b.quickFlips} hızlı satış`),
+  '',
+  `# İzlenen cüzdanlardan AYNI ANDA (≤${cfg.filters.sync_entry_sec ?? 3} sn) giren gruplar — bağımsız değil, birini tut ya da hepsini çıkar`,
+  ...syncPairs(),
   '',
   `# İzlenen cüzdanlardan şüpheli olanlar (wallets.yaml'dan ÇIKARMAYI düşün)`,
   ...(trackedBad.length ? trackedBad.map((x) => `- ${x.label} ${x.chain} ${x.address} · skor ${x.score} · ${x.kinds.join(', ')} · ${x.reasons.join('; ')}`) : ['- yok']),

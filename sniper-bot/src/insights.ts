@@ -18,9 +18,9 @@ const ofChain = (rows: Row[], c: Chain) => rows.filter((r) => rowChain(r) === c)
 
 export const TRAP_REASONS = new Set([
   'trap_score', 'trap_wallet', 'dev_sell', 'dev_serial', 'early_dump', 'rug_cluster', 'bundle', 'sniper_flip', 'sniper_rug_link', 'wash_trading',
-  'dev_sniper_hybrid', 'smart_trap', 'wash_ring', 'insider_exit', 'rug_ring', 'sync_swarm', 'coordinated_dump',
+  'dev_sniper_hybrid', 'smart_trap', 'wash_ring', 'insider_exit', 'rug_ring', 'sync_swarm', 'coordinated_dump', 'funding_cluster', 'coordinated_group', 'smart_sync',
 ]);
-const COMBO = ['dev_sniper_hybrid', 'smart_trap', 'wash_ring', 'insider_exit', 'rug_ring', 'coordinated_dump', 'trap_wallet'];
+const COMBO = ['dev_sniper_hybrid', 'smart_trap', 'wash_ring', 'insider_exit', 'rug_ring', 'coordinated_dump', 'coordinated_group', 'trap_wallet'];
 const SECURITY = new Set(['honeypot', 'top10', 'lp_lock', 'renounce', 'sell_tax', 'buy_tax']);
 
 const DEFAULT_USD = { sol: 160, bnb: 600, eth: 3000, mon: 0.019 } as const;
@@ -88,6 +88,100 @@ export function syncSection(rows: Row[], since: number): string[] {
     L.push('tekrarlayan senkron cüzdanlar (token / rug):');
     for (const [w, t] of top) L.push(`  · <code>${w}</code> ${t.size} / ${[...t].filter((k) => rugged.has(k)).length}`);
   } else L.push('tekrarlayan senkron cüzdan yok (≥2 token gerekir)');
+  return L;
+}
+
+// ---------- Koordineli cüzdan grubu (fonlama kümesi) ----------
+export function fundingSection(rows: Row[], since: number): string[] {
+  const L = ['🧬 <b>Fonlama kümesi</b> (erken alıcıları aynı cüzdan / dev mi fonladı?)'];
+  for (const c of enabledChains()) {
+    const win = ofChain(rows, c).filter((r) => Date.parse(r.ts) >= since && r.metrics.fundCommonPct != null);
+    if (!win.length) {
+      L.push(`${c}: fonlama verisi yok (sniper kontrolüne giren aday 0${c === 'blast' ? '; Blast Etherscan v2\'de yok' : c !== 'solana' ? ' ya da ETHERSCAN_API_KEY yok' : ''})`);
+      continue;
+    }
+    const avg = (k: 'fundCommonPct' | 'fundFreshPct') => win.reduce((s, r) => s + (r.metrics[k] ?? 0), 0) / win.length;
+    const cl = win.filter((r) => reasonsOf(r).includes('funding_cluster')).length;
+    const cg = win.filter((r) => reasonsOf(r).includes('coordinated_group')).length;
+    L.push(`${c}: ${win.length} aday · ort. ortak fonlayıcı %${avg('fundCommonPct').toFixed(0)} · taze cüzdan %${avg('fundFreshPct').toFixed(0)} · dev-fonlu ${win.filter((r) => (r.metrics.fundDevPct ?? 0) > 0).length} · funding_cluster ${cl} · coordinated_group ${cg}`);
+    const done = ofChain(rows, c).filter((r) => r.done && r.path.length && r.metrics.fundCommonPct != null && Date.parse(r.ts) >= Date.now() - 14 * DAY);
+    const a = done.filter((r) => (r.metrics.fundCommonPct ?? 0) >= 20), b = done.filter((r) => (r.metrics.fundCommonPct ?? 0) < 20);
+    if (a.length >= 3 && b.length >= 3)
+      L.push(`  14g: ortak fonlayıcı ≥%20 olanlarda rug %${pct(a.filter(isRug).length, a.length).toFixed(0)} (${a.length}) vs diğerleri %${pct(b.filter(isRug).length, b.length).toFixed(0)} (${b.length})`);
+    else L.push(`  14g isabet: veri az (kümeli ${a.length} / diğer ${b.length} biten; ikisi de ≥3 gerekir)`);
+  }
+  const rugged = new Set(rows.filter((r) => r.done && isRug(r)).map((r) => r.key));
+  const byF = new Map<string, Set<string>>();
+  for (const g of readJsonl<any>('funders.jsonl')) (byF.get(`${g.chain}:${g.funder}`) ?? byF.set(`${g.chain}:${g.funder}`, new Set()).get(`${g.chain}:${g.funder}`)!).add(`${g.chain}:${g.token}`);
+  const top = [...byF].filter(([, t]) => t.size >= 2).sort((x, y) => y[1].size - x[1].size).slice(0, 8);
+  if (top.length) {
+    L.push('tekrarlayan fonlayıcılar (token / rug):');
+    for (const [w, t] of top) L.push(`  · <code>${w}</code> ${t.size} / ${[...t].filter((k) => rugged.has(k)).length}`);
+  } else L.push('tekrarlayan fonlayıcı yok (≥2 token gerekir)');
+  return L;
+}
+
+// ---------- Rug isabet oranı (14g, ağ bazında) ----------
+// yakalama = rug olan adayların kaçı elendi · kesinlik = elenenlerin kaçı gerçekten rug · sızan = filtreyi geçip rug olan
+export function rugHitSection(rows: Row[]): string[] {
+  const L = ['🎯 <b>Rug isabet oranı</b> (14g, izlemesi biten adaylar)'];
+  for (const c of enabledChains()) {
+    const hist = ofChain(rows, c).filter((r) => r.done && r.path.length && Date.parse(r.ts) >= Date.now() - 14 * DAY);
+    if (hist.length < 10) {
+      L.push(`${c}: veri az (${hist.length} biten aday; ≥10 gerekir)`);
+      continue;
+    }
+    const rugs = hist.filter(isRug);
+    const elim = hist.filter((r) => reasonsOf(r).length);
+    const pass = hist.filter((r) => !reasonsOf(r).length);
+    const caught = rugs.filter((r) => reasonsOf(r).length).length;
+    const trapCaught = rugs.filter((r) => reasonsOf(r).some((x) => TRAP_REASONS.has(x))).length;
+    const leaked = pass.filter(isRug);
+    L.push(
+      `${c}: ${hist.length} aday · rug ${rugs.length} (%${pct(rugs.length, hist.length).toFixed(0)}) · yakalama %${pct(caught, rugs.length).toFixed(0)} (tuzak filtreleriyle %${pct(trapCaught, rugs.length).toFixed(0)}) · ` +
+        `kesinlik %${pct(elim.filter(isRug).length, elim.length).toFixed(0)} · geçen ${pass.length}, sızan rug ${leaked.length}`,
+    );
+    for (const r of leaked.slice(0, 3)) L.push(`  sızan: ${r.symbol} (${r.launchpad ?? '?'}) trap ${Math.round(r.metrics.trapScore ?? 0)}`);
+  }
+  return L;
+}
+
+// ---------- Kaçırılan yükselişler: elenip +%50 yapanlar ve filtre başına maliyet/fayda ----------
+export function missedSection(rows: Row[], since: number): string[] {
+  const L = ['🚀 <b>Kaçırılan yükselişler</b> (elenip ≥+%50 yapan adaylar)'];
+  const maxPct = (r: Row) => Math.max(...r.path.map(([, p]) => p));
+  const win = rows.filter((r) => Date.parse(r.ts) >= since && r.path.length && isPump(r) && reasonsOf(r).length);
+  if (!win.length) L.push('pencerede elenip pump yapan aday yok');
+  for (const r of win.sort((a, b) => maxPct(b) - maxPct(a)).slice(0, 10)) {
+    const rug = isRug(r) ? ' → sonra rug' : '';
+    L.push(`  · ${r.symbol} (${rowChain(r)}/${r.launchpad ?? '?'}) max +%${maxPct(r).toFixed(0)}${rug} · ${reasonsOf(r).slice(0, 4).join(', ')}`);
+  }
+  if (win.length > 10) L.push(`  … +${win.length - 10} daha`);
+  // 14g filtre karnesi: tek başına elediği (tek sebep) adaylarda kaçırılan pump vs önlenen rug
+  const hist = rows.filter((r) => r.done && r.path.length && Date.parse(r.ts) >= Date.now() - 14 * DAY);
+  const by = new Map<string, { n: number; solo: number; pump: number; rug: number; soloPump: number; soloRug: number }>();
+  for (const r of hist) {
+    const rs = reasonsOf(r);
+    for (const k of rs) {
+      const e = by.get(k) ?? by.set(k, { n: 0, solo: 0, pump: 0, rug: 0, soloPump: 0, soloRug: 0 }).get(k)!;
+      e.n++;
+      if (isPump(r) && !isRug(r)) e.pump++;
+      if (isRug(r)) e.rug++;
+      if (rs.length === 1) {
+        e.solo++;
+        if (isPump(r) && !isRug(r)) e.soloPump++;
+        if (isRug(r)) e.soloRug++;
+      }
+    }
+  }
+  const tab = [...by].filter(([, e]) => e.n >= 5).sort((a, b) => b[1].soloPump - a[1].soloPump || b[1].n - a[1].n).slice(0, 12);
+  if (!tab.length) return [...L, 'filtre karnesi (14g): veri az (sebep başına ≥5 biten aday gerekir)'];
+  L.push('filtre karnesi (14g · sebep: elenen → pump/rug · tek sebep olduğunda → pump/rug):');
+  for (const [k, e] of tab) {
+    const warn = e.solo >= 5 && e.soloPump > e.soloRug ? ' ⚠️ tek başına daha çok pump kaçırıyor' : '';
+    L.push(`  · ${k}: ${e.n} → %${pct(e.pump, e.n).toFixed(0)}/%${pct(e.rug, e.n).toFixed(0)} · tek ${e.solo} → ${e.soloPump}/${e.soloRug}${warn}`);
+  }
+  L.push('pump = zirve ≥+%50 ve sonra −%80 görmedi; ileri dönük garanti değil, gevşetme kararı /rapor config önerisine bırakılır.');
   return L;
 }
 

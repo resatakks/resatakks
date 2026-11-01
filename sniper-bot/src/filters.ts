@@ -34,6 +34,16 @@ export function evaluate(m: Metrics, f: Config['filters']): string[] {
     (m.syncRugLinkPct != null && m.syncRugLinkPct >= (f.max_sync_rug_link_pct ?? 25))
   )
     fail.push('sync_swarm');
+  if (
+    (m.fundCommonPct != null && m.fundCommonPct >= (f.max_common_funder_pct ?? 30)) ||
+    (m.fundDevPct != null && m.fundDevPct >= (f.max_fund_dev_pct ?? 10)) ||
+    (m.fundFreshPct != null && m.fundCommonPct != null && m.fundFreshPct >= (f.max_fresh_wallet_pct ?? 60) && m.fundCommonPct >= 20) ||
+    (m.fundPrevRugs ?? 0) >= 1
+  )
+    fail.push('funding_cluster');
+  // izlenen cüzdanlar aynı anda girdiyse bağımsız giriş sayısı min_smart_entries'in altında kalır
+  if (m.smartEffective != null && m.smartWallets.length + m.kolWallets.length >= f.min_smart_entries && m.smartEffective < f.min_smart_entries)
+    fail.push('smart_sync');
   if (m.trapScore != null && m.trapScore > f.max_trap_score) fail.push('trap_score');
   if (m.trapWallets?.length) fail.push('trap_wallet');
   if (f.combo_rules) fail.push(...comboFlags(m));

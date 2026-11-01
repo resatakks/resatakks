@@ -60,6 +60,19 @@ filters:
   max_sync_trade_pct: 55        # sync_swarm: trade% ≥55 VE koordineli cüzdan ≥3 → ele
   max_sync_repeat_wallets: 3
   max_sync_rug_link_pct: 25     # senkron grubun ≥%25'i önceki rug'larda da senkron → ele
+  # "aynı anda tüm cüzdanlar alıyor" = bağımsız sinyal değil. İzlenen cüzdanlar ≤3 sn içinde girerse tek giriş sayılır;
+  # bağımsız giriş min_smart_entries'in altında kalırsa → ele (smart_sync). discover-wallets bu grupları listeler.
+  sync_entry_sec: 3
+  # launchpad erken satış oranı: son 14g bu ağ+launchpad adaylarının ≥%60'ı ilk 8 dk dump/rug → trap skoru +25 (≥10 örnek)
+  max_launchpad_dump_pct: 60
+  # koordineli cüzdan grubu (fonlama kümesi): erken alıcıların ilk fonlayıcısı. Bilinen kalıp: dev/operatör tek
+  # cüzdandan çok sayıda taze cüzdana native gönderir, bunlar launch'ta arzı toplar (Rugproof vakası: 162 cüzdan, arzın yarısı).
+  # Borsa sıcak cüzdanları (≥1000 tx) gruplanmaz. EVM için ETHERSCAN_API_KEY gerekir (yoksa bilinmiyor → elemez).
+  funding_max_wallets: 12       # aday başına fonlayıcısı aranan erken alıcı (SOL: 2 RPC/cüzdan, EVM: 1 Etherscan)
+  fresh_wallet_hours: 48        # ilk işlemi son 48 sa içinde = taze cüzdan
+  max_common_funder_pct: 30     # erken alıcıların ≥%30'u aynı cüzdandan fonlanmış → ele
+  max_fund_dev_pct: 10          # erken alıcıların ≥%10'unu doğrudan dev fonlamış → ele
+  max_fresh_wallet_pct: 60      # taze cüzdan ≥%60 VE ortak fonlayıcı ≥%20 → ele
   # --- tuzak filtreleri (sert) ---
   early_dump_window_min: 8      # launch sonrası ilk N dk
   max_early_dump_pct: 35        # ilk 8 dk zirveden ≥%35 düşüş → ele
@@ -67,10 +80,10 @@ filters:
   max_dev_prev_rugs: 0          # dev'in önceki rug'u varsa → ele
   cluster_min_shared: 3         # aynı ≥3 erken alıcı …
   cluster_min_rugs: 2           # … ≥2 önceki rug'da birlikte erken girdiyse → ele
-  max_bundled_pct: 20           # dev'in ödediği / launch slot/bloğundaki erken alım ≥%20 → ele
+  max_bundled_pct: 15           # dev'in ödediği / launch slot/bloğundaki erken alım ≥%15 → ele (Bubblemaps: >%15 ciddi)
   max_trap_score: 50            # sinyal tuzak skoru > 50 → otomatik ele
   suspect_wallet_score: 50      # bu skorun üstündeki cüzdan = şüpheli (sinyal + rapor + discover)
-  combo_rules: true             # dev_sniper_hybrid / smart_trap / wash_ring / insider_exit / rug_ring / coordinated_dump → tek başına eler
+  combo_rules: true             # dev_sniper_hybrid / smart_trap / wash_ring / insider_exit / rug_ring / coordinated_dump / coordinated_group → tek başına eler
   unknown_trap_penalty: 0       # eksik veri başına ek ceza (taban 4/alan, tavan 16 zaten uygulanır)
   min_smart_entries: 2
   min_smart_only: 1

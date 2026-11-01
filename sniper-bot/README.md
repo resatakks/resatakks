@@ -16,6 +16,9 @@ GeckoTerminal new_pools + DexScreener profiles  (20 sn)
       ≥ 4 cüzdan 30 sn içinde al-sat yapıyor ve en büyük 5'li grup trade'lerin ≥ %20'si → ele
   → senkron cüzdan (aynı swap verisi): aynı slot/blokta aynı yönde ≥3 cüzdan; aynı çift ≥3 blokta birlikte = koordineli
       senkron trade ≥ %55 VE koordineli ≥3 cüzdan → ele (sync_swarm) · grubun ≥%25'i önceki rug'larda da senkron → ele
+  → fonlama kümesi: erken alıcıların ilk fonlayıcısı (SOL RPC / EVM Etherscan v2); ortak fonlayıcı ≥%30, dev-fonlu ≥%10,
+      taze cüzdan ≥%60 + ortak ≥%20 ya da fonlayıcının önceki rug'u → ele (funding_cluster) · kombo coordinated_group
+  → izlenen cüzdanlar ≤3 sn içinde aynı token'a girdiyse tek giriş sayılır (smart_sync) · launchpad'in 14g erken dump/rug oranı trap skoruna
       koordineli ≥3 + erken dump/dev satışı/wash → coordinated_dump (kombo, tek başına eler)
   → holder sayımı t0, 120 sn bekle, t1 → büyüme > %0.1  (SOL: Helius DAS, BSC: GoPlus)
   → smart money/KOL
@@ -72,7 +75,9 @@ Gün sınırı `timezone: Europe/Istanbul` — gece seansı (00:00–08:00) tek 
 | `/rapor` | son 24 sa, tüm bölümler |
 | `/rapor 6` | son 6 sa (1–336 sa) |
 | `/rapor tuzak` | tuzak oranı, kombo sayıları, 14 gün tuzak isabeti (rug %, kaçan +%50, geçen-rug %), şüpheli cüzdanlar + senkron analizi |
-| `/rapor senkron` | aynı slot/blokta ≥3 cüzdanın aynı yönde işlemi: ağ başına ort. senkron trade %, koordineli grup, sync_swarm/coordinated_dump elemeleri, 14g rug farkı, tekrarlayan senkron cüzdanlar |
+| `/rapor kacan` | elenip ≥+%50 yapan adaylar (sembol, ağ/launchpad, max %, sebepler) + 14g filtre karnesi: sebep başına kaçan pump vs önlenen rug |
+| `/rapor isabet` | rug isabet oranı (14g, ağ başına): rug %, yakalama % (tuzak filtreleriyle ayrı), kesinlik %, filtreyi geçip rug olan (sızan) |
+| `/rapor senkron` | aynı slot/blokta ≥3 cüzdanın aynı yönde işlemi: ağ başına ort. senkron trade %, koordineli grup, sync_swarm/coordinated_dump elemeleri, 14g rug farkı, tekrarlayan senkron cüzdanlar + fonlama kümesi (ortak fonlayıcı %, taze cüzdan %, tekrarlayan fonlayıcılar) |
 | `/rapor risk` | önerilen günlük max risk (ölçek × cap, ≈$) ve hangi kuralın küçülttüğü |
 | `/rapor firsat rekabet` | hangi ağda fırsat daha çok / rekabet daha az (son 24 sa, tahmin) |
 | `/rapor launchpad` | köken launchpad/dex kırılımı (pump-fun, meteora-dbc, four-meme …) |

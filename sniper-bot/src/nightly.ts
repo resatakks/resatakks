@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CHAINS, DATA_DIR, cfg, nativeSymbol, riskFor, type Chain } from './config.js';
-import { competitionSection, launchpadSection, opportunitySection, riskSection, safeExitSection, syncSection, trapDetail, TRAP_REASONS } from './insights.js';
+import { competitionSection, launchpadSection, opportunitySection, riskSection, safeExitSection, syncSection, fundingSection, missedSection, rugHitSection, trapDetail, TRAP_REASONS } from './insights.js';
 import { loadRows, rejectCounts, runOptimization, shadowSince, fmtScore, type Row } from './optimizer.js';
 import { scanStats } from './scanner.js';
 import { trapRisk } from './smartmoney.js';
@@ -70,6 +70,7 @@ const KIND_TR: Record<SuspectKind, string> = {
   wash_ring: 'wash halkası',
   rug_cluster: 'rug kümesi',
   sync_ring: 'senkron halka',
+  funder_ring: 'fonlayıcı halkası',
 };
 
 // "Tuzağa Düşme Risk Analizi": izlenen smart/KOL tuzak skoru + gece elenen tuzaklar + şüpheli cüzdan listesi.
@@ -110,8 +111,8 @@ export function trapAnalysis(rows: Row[], since: number): string[] {
   return L;
 }
 
-// /rapor alt bölümleri: /rapor tuzak | risk | firsat | rekabet | cikis | config | <saat>
-export const REPORT_PARTS = ['ozet', 'risk', 'firsat', 'rekabet', 'launchpad', 'tuzak', 'senkron', 'cikis', 'config'] as const;
+// /rapor alt bölümleri: /rapor tuzak | senkron | kacan | isabet | risk | firsat | rekabet | launchpad | cikis | config | <saat>
+export const REPORT_PARTS = ['ozet', 'risk', 'firsat', 'rekabet', 'launchpad', 'tuzak', 'senkron', 'kacan', 'isabet', 'cikis', 'config'] as const;
 export type ReportPart = (typeof REPORT_PARTS)[number];
 export interface ReportOpts {
   sinceMs?: number; // varsayılan: nightly penceresi başlangıcı
@@ -166,7 +167,9 @@ export function morningReport(opts: ReportOpts = {}): string {
   if (want('rekabet')) L.push('', ...competitionSection());
   if (want('launchpad')) L.push('', ...launchpadSection(rows));
   if (want('tuzak')) L.push('', ...trapAnalysis(rows, since), '', ...trapDetail(rows, since));
-  if (want('tuzak') || want('senkron')) L.push('', ...syncSection(rows, since));
+  if (want('tuzak') || want('senkron')) L.push('', ...syncSection(rows, since), '', ...fundingSection(rows, since));
+  if (want('tuzak') || want('isabet') || want('kacan')) L.push('', ...rugHitSection(rows));
+  if (want('kacan')) L.push('', ...missedSection(rows, since));
   if (want('cikis')) L.push('', ...safeExitSection(rows));
   if (!want('config')) return L.join('\n');
 

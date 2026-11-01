@@ -50,6 +50,22 @@ export function activeEntries(chain: Chain, token: string): { smart: string[]; k
   return { smart, kol };
 }
 
+// "Aynı anda tüm cüzdanlar alıyor" kalıbı: izlenen cüzdanlar ≤ sync_entry_sec içinde aynı token'a giriyorsa
+// bağımsız sinyal değil (tek operatörün çoklu cüzdanı, copy-trade zinciri ya da yem grubu) → tek giriş sayılır.
+export function entrySync(chain: Chain, token: string, labels: string[]): { effective: number; synced: string[] } {
+  const win = (cfg.filters.sync_entry_sec ?? 3) * 1000;
+  const first = new Map<string, number>();
+  for (const e of events.get(key(chain, token)) ?? []) if (e.side === 'buy' && labels.includes(e.label) && !first.has(e.label)) first.set(e.label, e.ts);
+  const xs = [...first].sort((a, b) => a[1] - b[1]);
+  let effective = 0;
+  const synced = new Set<string>();
+  for (let i = 0; i < xs.length; i++) {
+    if (i && xs[i][1] - xs[i - 1][1] <= win) synced.add(xs[i][0]).add(xs[i - 1][0]);
+    else effective++;
+  }
+  return { effective, synced: [...synced] };
+}
+
 export function exitsSince(chain: Chain, token: string, labels: string[], sinceMs: number): string[] {
   return (events.get(key(chain, token)) ?? [])
     .filter((e) => e.side === 'sell' && e.ts >= sinceMs && labels.includes(e.label))

@@ -152,6 +152,16 @@ export function runOptimization(all: Row[] = loadRows(), chain?: Chain): OptResu
     const s = objective(score(train, f, curE));
     if (s > bestFs) [bestF, bestFs] = [f, s];
   }
+  // 1d) Fonlama kümesi eşikleri
+  for (const f of grid(bestF, {
+    max_common_funder_pct: [20, 30, 45],
+    max_fund_dev_pct: [5, 10, 20],
+    max_fresh_wallet_pct: [40, 60, 80],
+    max_launchpad_dump_pct: [45, 60, 75],
+  })) {
+    const s = objective(score(train, f, curE));
+    if (s > bestFs) [bestF, bestFs] = [f, s];
+  }
 
   // 2) Çıkışlar (en iyi filtreyle)
   let bestE = curE;

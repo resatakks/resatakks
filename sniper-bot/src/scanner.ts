@@ -4,15 +4,16 @@ import { executor } from './exec/index.js';
 import { evaluate } from './filters.js';
 import { openPosition } from './positions.js';
 import { canOpen, probeSize } from './risk.js';
-import { activeEntries, confirmSolanaOnChain } from './smartmoney.js';
+import { activeEntries, confirmSolanaOnChain, entrySync } from './smartmoney.js';
 import { bestPairs, discover } from './sources/discovery.js';
 import { holderCount, security } from './sources/security.js';
 import { earlyDumpPct } from './sources/ohlcv.js';
 import { sniperPct } from './sources/sniper.js';
+import { fundingCheck } from './sources/funding.js';
 import { washCheck } from './sources/wash.js';
 import { state } from './state.js';
 import { tg } from './telegram.js';
-import { clusterCheck, comboFlags, syncRugLinkPct, devLinkedEarlyPct, devPrevRugs, signalTrapScore, suspectEarlyPct, suspects, trapLabels } from './trap.js';
+import { clusterCheck, comboFlags, syncRugLinkPct, funderPrevRugs, devLinkedEarlyPct, devPrevRugs, launchpadDumpPct, signalTrapScore, suspectEarlyPct, suspects, trapLabels } from './trap.js';
 import { track } from './tracker.js';
 import type { Metrics, PairInfo } from './types.js';
 import { errMsg, jsonl, log, queue, sleep } from './util.js';
@@ -77,6 +78,11 @@ async function deepCheck(pi: PairInfo) {
   const sm = activeEntries(pi.chain, pi.token);
   base.smartWallets = sm.smart;
   base.kolWallets = sm.kol;
+  const es = entrySync(pi.chain, pi.token, [...sm.smart, ...sm.kol]);
+  base.smartEffective = sm.smart.length + sm.kol.length ? es.effective : null;
+  base.smartSynced = es.synced;
+  if (es.synced.length >= 2) jsonl('smart_sync.jsonl', { chain: pi.chain, token: pi.token, labels: es.synced });
+  base.launchpadDumpPct = launchpadDumpPct(pi.chain, pi.launchpad);
 
   // 4) Sniper oranı (en pahalı) yalnız smart money geçtiyse.
   if (sm.smart.length + sm.kol.length >= f.min_smart_entries) {
@@ -98,6 +104,16 @@ async function deepCheck(pi: PairInfo) {
     base.clusterShared = cl?.maxShared ?? null;
     base.suspectEarlyPct = suspectEarlyPct(pi.chain, ws);
     base.devLinkedEarlyPct = devLinkedEarlyPct(pi.chain, pi.token, ws);
+    // 4b) Koordineli cüzdan grubu: erken alıcıların fonlayıcısı (ortak kaynak / dev / taze cüzdan)
+    const fund = await fundingCheck(pi.chain, pi.token, ws, sn?.dev ?? sec.creator ?? null).catch((e) => {
+      log.warn('funding', { token: pi.token, err: errMsg(e) });
+      return null;
+    });
+    base.fundChecked = fund?.checked ?? null;
+    base.fundFreshPct = fund?.freshPct ?? null;
+    base.fundCommonPct = fund?.commonPct ?? null;
+    base.fundDevPct = fund?.devPct ?? null;
+    base.fundPrevRugs = fund?.topFunder ? funderPrevRugs(pi.chain, pi.token, fund.topFunder) : null;
 
     // 5) İlk 8 dk dump (GeckoTerminal 1 dk mum).
     base.earlyDumpPct = await earlyDumpPct(pi.chain, pi.pair, pi.pairCreatedAt).catch((e) => {
