@@ -1,4 +1,4 @@
-# sniper-bot — Solana (Jupiter + pump.fun benzeri launchpad'ler) + BSC (Pancake V2) + Base (Uniswap V2 / Aerodrome) + Blast (Uniswap V2), smart money/KOL hibrit sinyal
+# sniper-bot — Solana (Jupiter + pump.fun benzeri launchpad'ler) + BSC (Pancake V2) + Base (Uniswap V2 / Aerodrome) + Blast (Uniswap V2) + Monad (Uniswap V2), smart money/KOL hibrit sinyal
 
 Varsayılan **paper** mod: gerçek quote'larla simülasyon, sanal bakiye. Live için `config.yaml → mode: live` **ve** env `LIVE_CONFIRM=YES`.
 
@@ -353,9 +353,10 @@ Skor ve bileşenleri her adayın `metrics.trapScore` / `trapParts` alanında; op
 
 ## Bilinen sınırlar
 
-- **Ağ aktivitesi (1 Kas 2026, GeckoTerminal new_pools ilk sayfa):** Solana ~20 havuz/dk (çoğu pump-fun bonding curve; likiditesi ≥$10k olan 2–4), BSC 20 havuz/14 dk (pancake_v2 16, four-meme 4), Base 20 havuz/21 dk (16'sı Uniswap V4 → atlanır), Blast 0 (kapalı), Monad 20/15 dk ama likidite ≥$10k yok ve V2 router doğrulanmadı (eklenmedi), Ethereum gas $50 probe için fazla (eklenmedi).
+- **Ağ aktivitesi (1 Kas 2026, GeckoTerminal new_pools ilk sayfa):** Solana ~20 havuz/dk (çoğu pump-fun bonding curve; likiditesi ≥$10k olan 2–4), BSC 20 havuz/14 dk (pancake_v2 16, four-meme 4), Base 20 havuz/21 dk (16'sı Uniswap V4 → atlanır), Blast 0 (kapalı), Monad 20/15 dk ama likidite ≥$10k yok (eklendi, paper), Ethereum gas $50 probe için fazla (eklenmedi).
 - **Solana launchpad'leri:** pump.fun, letsbonk, meteora DBC, raydium launchlab, boop, moonit, bags vb. token'ları keşfedilir ama bonding curve'deyken LP/likidite olmadığından `min_liquidity_usd`'de kalır; mezun olunca (pumpswap / meteora-damm-v2 / raydium) normal filtrelerden geçer. Bonding curve'e doğrudan alım (pre-migration) yok.
 - **Blast:** Uniswap V2 (router `0xBB66…3035`, factory `0x5C34…1070`, WETH `0x4300…0004` on-chain doğrulandı). honeypot.is Blast'ı desteklemiyor → vergi/honeypot yalnız GoPlus. Varsayılan kapalı.
+- **Monad (143):** Uniswap V2 (router `0x4b2a…6804`, factory `0x182a…0f59`, WMON `0x3bd3…433a` on-chain doğrulandı). honeypot.is desteklemiyor → yalnız GoPlus. Public RPC eth_getLogs'u 100 blokla sınırlar → bot parçalar (90 dk'lık havuzda satış taraması ~180 çağrı; yavaşsa ücretli RPC). Blok ~0.3 sn (ölçüm), `sniper_blocks: 15`. Explorer monadscan.com (adres doğrulanmadı). Varsayılan açık ama paper_only.
 - **Base:** yalnız Uniswap **V2** ve Aerodrome **volatile** havuzları. Uniswap V3/V4, Clanker/Flaunch (V4 hook) ve bonding-curve token'ları atlanır (pair 20-byte adres değilse aday alınmaz). Ücret EIP-1559, tavan `exec.base_max_fee_gwei`. GoPlus/honeypot.is chain id 8453.
 
 - **BSC:** yalnız Pancake **V2**. four.meme bonding curve veya yalnız V3 havuzlu token'lar atlanır. GoPlus `holder_count` önbellekli → BSC holder büyümesi kaba.

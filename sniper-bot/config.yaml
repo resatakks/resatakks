@@ -1,5 +1,5 @@
 # $30–50 gerçek bankroll profili. Varsayılan paper; live için ayrıca env LIVE_CONFIRM=YES.
-# Tüm tutarlar o ağın native birimi. Dolar karşılıkları yaklaşık fiyatla (SOL≈$160, BNB≈$600, ETH≈$3000) —
+# Tüm tutarlar o ağın native birimi. Dolar karşılıkları yaklaşık fiyatla (SOL≈$160, BNB≈$600, ETH≈$3000, MON≈$0.0192) —
 # fiyat değişince probe/cap'leri aynı dolar seviyesine göre güncelle.
 # $50 ile öneri: YALNIZ BİR ağı live yap (bankroll bölünürse probe'lar ücrete göre çok küçülür);
 # diğerleri paper_only: true kalsın, /rapor'daki fırsat/rekabet tablosu hangisinin daha iyi gittiğini gösterir.
@@ -12,6 +12,8 @@ chains:
   base: { enabled: true, paper_only: true }    # Uniswap V2 → Aerodrome (volatile); V3/V4/Clanker havuzları atlanır
                                                # 1 Kas 2026 ölçüm: Base yeni havuzlarının ~%80'i Uniswap V4 → çoğu atlanır
   blast: { enabled: false, paper_only: true }  # Uniswap V2 (router on-chain doğrulandı); 1 Kas 2026: yeni havuz 0 → kapalı
+  monad: { enabled: true, paper_only: true }   # 5. ağ: Uniswap V2 (router on-chain doğrulandı). Yeni havuzların çoğu spam →
+                                               # filtrede kalır; paper'da /rapor fırsat/rekabet tablosuyla ölç, sonra karar ver
 
 scan:
   interval_sec: 20
@@ -20,7 +22,7 @@ scan:
   deep_check_concurrency: 2
   seen_ttl_min: 180
   # GeckoTerminal new_pools sayfası (20 havuz/sayfa, 2.1 sn). Solana ~20 havuz/dk → 3 sayfa ≈ son 3 dk.
-  gecko_pages: { solana: 3, bsc: 1, base: 1, blast: 1 }
+  gecko_pages: { solana: 3, bsc: 1, base: 1, blast: 1, monad: 1 }
   # pump.fun benzeri launchpad'ler (pump-fun, letsbonk-fun, meteora-dbc, raydium-launchlab, boop-fun, moonit,
   # bags-fm, heaven …) zaten taranır: bonding curve'deyken LP/likidite yok → filtrede kalır, mezun olunca
   # (pumpswap / meteora-damm-v2 / raydium) normal filtrelerden geçer. Kökeni rapordaki launchpad kırılımında.
@@ -80,6 +82,9 @@ chain_filters:
     max_buy_tax_pct: 3
   bsc:
     sniper_blocks: 6            # 0.75 sn blok → ilk ~4.5 sn
+  monad:
+    sniper_blocks: 15           # 0.3 sn blok → ilk ~4.5 sn
+    max_top10_pct: 25
 
 risk:
   sol:                          # $50 ≈ 0.31 SOL
@@ -88,7 +93,7 @@ risk:
     probe_max: 0.0375           # ≈ $6
     probe_balance_pct: 12
     fee_reserve: 0.02           # tx ücreti + ATA rent
-    daily_loss_cap: 0.03        # ≈ $4.8 (~%10 bankroll)
+    daily_loss_cap: 0.08        # ≈ $12.8 (~%26 bankroll) — operatör tercihi; pratik tavan aşağıda
     daily_profit_target: 0.06   # ≈ $9.6 → o gün yeni giriş yok
   bnb:                          # $50 ≈ 0.083 BNB
     paper_start_balance: 0.083
@@ -106,13 +111,23 @@ risk:
     fee_reserve: 0.0006         # approve + swap + sell, Base L2 + L1 data ücreti
     daily_loss_cap: 0.0016
     daily_profit_target: 0.0033
+  mon:                          # Monad · $50 ≈ 2600 MON (1 Kas 2026: MON ≈ $0.0192)
+    paper_start_balance: 2600
+    probe_min: 250              # ≈ $4.8
+    probe_max: 310              # ≈ $6
+    probe_balance_pct: 12
+    fee_reserve: 5              # swap ~200k gas × 102 gwei ≈ 0.02 MON; Monad gas limit'i ücretlendirir → bol pay
+    daily_loss_cap: 250
+    daily_profit_target: 500
   max_concurrent: 2
   max_trades_per_day: 6
   cooldown_after_loss_min: 45
   max_consecutive_losses: 2
   reentry_block_hours: 72       # aynı token'a 72 saat tekrar giriş yok (kapanıştan itibaren)
   # realize kayıp + açık pozisyonlar × % + yeni × % <= daily_loss_cap × risk ölçeği
-  # SOL: 2 × 0.0375 × 0.4 = 0.03 ≤ 0.03 → iki açık pozisyon; bir kayıp realize olunca yeni giriş kesilir.
+  # SOL (cap 0.08): 2 × 0.0375 × 0.4 = 0.03 ≤ 0.08 → iki açık pozisyon. Günlük gerçek tavanı çoğunlukla
+  # max_consecutive_losses (2 kayıp → dur) ve max_trades_per_day (6 × 0.0375 = 0.225 SOL toplam giriş) belirler;
+  # stop -%20 ile tipik kayıp/işlem ≈ 0.0075 SOL. auto_scale bu cap'i rapora göre küçültebilir (asla büyütmez).
   assumed_worst_loss_pct: 40
   auto_scale: true              # /rapor (ve sabah raporu) "önerilen günlük max risk" ölçeği cap'i küçültür (asla büyütmez)
   min_scale: 0.25
@@ -132,7 +147,8 @@ exec:
   sell_slippage_bps: 1500
   sol_priority_max_lamports: 50000
   bsc_gas_price_gwei: 1
-  base_max_fee_gwei: 0.5        # EIP-1559 tavanı; Base'de tipik ücret bunun çok altında
+  base_max_fee_gwei: 0.5        # EIP-1559 tavanı; Base'de tipik ücret bunun çok altında (Blast da bunu kullanır)
+  monad_max_fee_gwei: 200       # Monad base fee ~100 gwei (1 Kas 2026)
   paper_extra_slippage_pct: 2
 
 tracking:
@@ -147,4 +163,4 @@ nightly:
   summary_to_telegram: false
   report_at: "07:45"     # sabah raporu data/sabah-raporu-<gün>.txt
   auto_report: false     # true → 07:45'te Telegram'a da at. false → yalnız /rapor ile iste
-  usd_ref: { sol: 160, bnb: 600, eth: 3000 }   # rapordaki ≈$ karşılıkları (fiyat değişince güncelle)
+  usd_ref: { sol: 160, bnb: 600, eth: 3000, mon: 0.0192 }   # rapordaki ≈$ karşılıkları (fiyat değişince güncelle)

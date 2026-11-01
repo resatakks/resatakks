@@ -1,5 +1,5 @@
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
-import { JsonRpcProvider, Wallet } from 'ethers';
+import { JsonRpcProvider, Wallet, type Filter, type Log } from 'ethers';
 import bs58 from 'bs58';
 import { env, isLive, type EvmChain } from './config.js';
 
@@ -58,6 +58,7 @@ export interface EvmNet {
   quotes: Set<string>;
   routes: EvmRoute[];
   secPerBlock: number; // varsayılan; ölçüm mümkünse blok zaman damgasından hesaplanır
+  logRange?: number; // RPC'nin eth_getLogs blok aralığı sınırı (Monad public RPC: 100)
   explorer: string;
 }
 
@@ -110,7 +111,38 @@ export const EVM: Record<EvmChain, EvmNet> = {
     secPerBlock: 2,
     explorer: 'https://blastscan.io',
   },
+  // Monad (143): Uniswap V2 router/factory/WMON 1 Kas 2026'da rpc.monad.xyz üzerinde eth_call ile doğrulandı
+  // (router.factory() = factory, router.WETH() = WMON, WMON/USDC pair token0/1). Ölçülen blok ~0.3 sn, gas ~102 gwei.
+  // GoPlus 143'ü destekliyor, honeypot.is desteklemiyor. Yeni havuzların çoğu spam (likidite ≪ $10k).
+  monad: {
+    id: 143,
+    rpcEnv: 'MONAD_RPC_URL',
+    keyEnv: 'MONAD_PRIVATE_KEY',
+    wrapped: '0x3bd359c1119da7da1d913d1c4d2b7c461115433a',
+    quotes: new Set(
+      [
+        '0x3bd359c1119da7da1d913d1c4d2b7c461115433a', // WMON
+        '0x754704bc059f8c67012fed69bc8a327a5aafb603', // USDC
+      ].map((a) => a.toLowerCase()),
+    ),
+    routes: [{ name: 'uniswap_v2', kind: 'v2', router: '0x4b2ab38dbf28d31d467aa8993f6c2585981d6804', factory: '0x182a927119d56008d921126764bf884221b10f59' }],
+    secPerBlock: 0.3,
+    logRange: 100,
+    explorer: 'https://monadscan.com',
+  },
 };
+
+// eth_getLogs'u ağın blok aralığı sınırına göre parçalayıp sırayla çağırır.
+export async function getLogsChunked(chain: EvmChain, filter: Filter & { fromBlock: number; toBlock: number }): Promise<Log[]> {
+  const step = EVM[chain].logRange ?? Infinity;
+  const p = evmProvider(chain);
+  if (filter.toBlock - filter.fromBlock + 1 <= step) return p.getLogs(filter);
+  const out: Log[] = [];
+  for (let from = filter.fromBlock; from <= filter.toBlock; from += step) {
+    out.push(...(await p.getLogs({ ...filter, fromBlock: from, toBlock: Math.min(filter.toBlock, from + step - 1) })));
+  }
+  return out;
+}
 
 const providers = new Map<EvmChain, JsonRpcProvider>();
 export const evmProvider = (c: EvmChain) => {

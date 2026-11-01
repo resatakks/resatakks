@@ -15,7 +15,7 @@ export async function gmgnTokenStats(chain: Chain, token: string): Promise<GmgnS
   const base = env('GMGN_API_BASE', false);
   if (!base) return null;
   await throttle('gmgn', 1500);
-  const j = await getJson<any>(`${base.replace(/\/$/, '')}/token/${({ solana: 'sol', bsc: 'bsc', base: 'base', blast: 'blast' } as const)[chain]}/${token}`);
+  const j = await getJson<any>(`${base.replace(/\/$/, '')}/token/${({ solana: 'sol', bsc: 'bsc', base: 'base', blast: 'blast', monad: 'monad' } as const)[chain]}/${token}`);
   const d = j.data ?? j;
   return {
     sniperPct: d.sniper_hold_rate != null ? Number(d.sniper_hold_rate) * 100 : undefined,

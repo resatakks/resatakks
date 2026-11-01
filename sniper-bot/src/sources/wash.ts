@@ -1,6 +1,6 @@
 import { id as keccakId, zeroPadValue, getAddress } from 'ethers';
 import { cfg, env, isEvm, type Chain, type EvmChain } from '../config.js';
-import { EVM, evmProvider } from '../chains.js';
+import { EVM, evmProvider, getLogsChunked } from '../chains.js';
 import { getJson, jsonl, throttle } from '../util.js';
 
 // Wash trading: küçük bir cüzdan grubu (wash_group_max) wash_window_sec içinde hem alıp hem satıyor
@@ -71,8 +71,8 @@ async function evmTrades(chain: EvmChain, token: string, pair: string): Promise<
   const from = head - span;
   const pt = zeroPadValue(pair, 32);
   const [buys, sells, bHead, bFrom] = await Promise.all([
-    p.getLogs({ address: token, topics: [TRANSFER, pt], fromBlock: from, toBlock: head }),
-    p.getLogs({ address: token, topics: [TRANSFER, null, pt], fromBlock: from, toBlock: head }),
+    getLogsChunked(chain, { address: token, topics: [TRANSFER, pt], fromBlock: from, toBlock: head }),
+    getLogsChunked(chain, { address: token, topics: [TRANSFER, null, pt], fromBlock: from, toBlock: head }),
     p.getBlock(head),
     p.getBlock(from),
   ]);

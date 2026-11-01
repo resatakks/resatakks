@@ -101,7 +101,7 @@ export async function pollSolanaHolders(mint: string, labels: string[]) {
   }
 }
 
-// ---------- EVM (BSC + Base): Transfer log taraması (iki getLogs çağrısı / tur, ağ başına) ----------
+// ---------- EVM: Transfer log taraması (iki getLogs çağrısı / tur, ağ başına) ----------
 const TRANSFER = keccakId('Transfer(address,address,uint256)');
 const fromBlock: Partial<Record<EvmChain, number>> = {};
 export async function pollEvm(chain: EvmChain) {
@@ -110,7 +110,7 @@ export async function pollEvm(chain: EvmChain) {
   const head = await p.getBlockNumber();
   const last = (fromBlock[chain] ??= head - 40);
   if (head <= last) return;
-  const toBlock = Math.min(head, last + 400);
+  const toBlock = Math.min(head, last + Math.min(400, EVM[chain].logRange ?? 400));
   const topics = wallets[chain].map((w) => zeroPadValue(w.address, 32));
   const [ins, outs] = await Promise.all([
     p.getLogs({ topics: [TRANSFER, null, topics], fromBlock: last + 1, toBlock }),

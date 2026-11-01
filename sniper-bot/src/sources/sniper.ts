@@ -1,7 +1,7 @@
 import { PublicKey } from '@solana/web3.js';
 import { Contract, id as keccakId, zeroPadValue, getAddress } from 'ethers';
 import { filtersFor, isEvm, type Chain, type EvmChain } from '../config.js';
-import { EVM, evmProvider, solConn } from '../chains.js';
+import { EVM, evmProvider, getLogsChunked, solConn } from '../chains.js';
 import { norm, rugLinkPct } from '../trap.js';
 import { jsonl, throttle } from '../util.js';
 import { gmgnTokenStats } from './gmgn.js';
@@ -184,14 +184,14 @@ async function blockAt(chain: EvmChain, tsSec: number): Promise<number> {
   return lo;
 }
 
-// ---- EVM (BSC + Base): Transfer(pair → alıcı) logları ----
+// ---- EVM (BSC/Base/Blast/Monad): Transfer(pair → alıcı) logları ----
 async function evmEarly(chain: EvmChain, token: string, pair: string, pairCreatedAt: number, creator?: string | null): Promise<Early | null> {
   if (!pairCreatedAt) return null;
   const f = filtersFor(chain);
   const p = evmProvider(chain);
   const pairTopic = zeroPadValue(pair, 32);
   const start = (await blockAt(chain, Math.floor(pairCreatedAt / 1000))) - 20;
-  const logs = await p.getLogs({ address: token, topics: [TRANSFER, pairTopic], fromBlock: start, toBlock: start + 20 + f.sniper_blocks + 40 });
+  const logs = await getLogsChunked(chain, { address: token, topics: [TRANSFER, pairTopic], fromBlock: start, toBlock: start + 20 + f.sniper_blocks + 40 });
   if (!logs.length) return null;
   const first = logs[0].blockNumber;
 
@@ -234,8 +234,9 @@ async function evmEarly(chain: EvmChain, token: string, pair: string, pairCreate
   const from0 = [...sellers.map((b) => b.wallet), ...(dev ? [dev] : [])];
   if (from0.length) {
     const fromTopics = [...new Set(from0)].map((w) => zeroPadValue(w, 32));
-    for (let from = first + 1; from <= head; from += LOG_CHUNK) {
-      const sells = await p.getLogs({ address: token, topics: [TRANSFER, fromTopics, pairTopic], fromBlock: from, toBlock: Math.min(head, from + LOG_CHUNK - 1) });
+    const chunk = Math.min(LOG_CHUNK, EVM[chain].logRange ?? LOG_CHUNK);
+    for (let from = first + 1; from <= head; from += chunk) {
+      const sells = await p.getLogs({ address: token, topics: [TRANSFER, fromTopics, pairTopic], fromBlock: from, toBlock: Math.min(head, from + chunk - 1) });
       for (const l of sells) {
         const w = getAddress('0x' + l.topics[1].slice(26));
         if (w === dev) devSold += BigInt(l.data);

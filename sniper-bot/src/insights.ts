@@ -23,7 +23,7 @@ export const TRAP_REASONS = new Set([
 const COMBO = ['dev_sniper_hybrid', 'smart_trap', 'wash_ring', 'insider_exit', 'rug_ring', 'trap_wallet'];
 const SECURITY = new Set(['honeypot', 'top10', 'lp_lock', 'renounce', 'sell_tax', 'buy_tax']);
 
-const DEFAULT_USD = { sol: 160, bnb: 600, eth: 3000 } as const;
+const DEFAULT_USD = { sol: 160, bnb: 600, eth: 3000, mon: 0.019 } as const;
 const riskKey = (c: Chain) => nativeSymbol(c).toLowerCase() as keyof typeof DEFAULT_USD;
 export const toUsd = (c: Chain, native: number) => native * (cfg.nightly.usd_ref?.[riskKey(c)] ?? DEFAULT_USD[riskKey(c)]);
 

@@ -2,10 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
 
-export type Chain = 'solana' | 'bsc' | 'base' | 'blast';
-export const CHAINS: Chain[] = ['solana', 'bsc', 'base', 'blast'];
+export type Chain = 'solana' | 'bsc' | 'base' | 'blast' | 'monad';
+export const CHAINS: Chain[] = ['solana', 'bsc', 'base', 'blast', 'monad'];
 export type EvmChain = Exclude<Chain, 'solana'>;
-export const isEvm = (c: string): c is EvmChain => c === 'bsc' || c === 'base' || c === 'blast';
+export const isEvm = (c: string): c is EvmChain => c === 'bsc' || c === 'base' || c === 'blast' || c === 'monad';
 // EVM adresleri küçük harfe normalize edilir (Solana base58 büyük/küçük harf duyarlı).
 export const normAddr = (chain: string, a: string) => (isEvm(chain) ? a.toLowerCase() : a);
 
@@ -81,6 +81,7 @@ export interface Config {
     sol: ChainRisk;
     bnb: ChainRisk;
     eth: ChainRisk;
+    mon?: ChainRisk; // Monad; yoksa chains.monad kapalı olmalı
     auto_scale: boolean; // Sabah Raporu'nun risk çarpanı daily_loss_cap'e uygulanır
     min_scale: number;
     max_concurrent: number;
@@ -106,6 +107,7 @@ export interface Config {
     sol_priority_max_lamports: number;
     bsc_gas_price_gwei: number;
     base_max_fee_gwei: number;
+    monad_max_fee_gwei?: number; // Monad EIP-1559 tavanı (base fee ~100 gwei)
     paper_extra_slippage_pct: number;
   };
   tracking: { sample_every_min: number; track_for_min: number };
@@ -117,7 +119,7 @@ export interface Config {
     summary_to_telegram: boolean;
     report_at: string;
     auto_report?: boolean; // false → report_at'te Telegram'a atmaz (yalnız data/ dosyası), rapor /rapor ile istenir
-    usd_ref?: Partial<Record<'sol' | 'bnb' | 'eth', number>>; // rapordaki ≈$ karşılıkları
+    usd_ref?: Partial<Record<'sol' | 'bnb' | 'eth' | 'mon', number>>; // rapordaki ≈$ karşılıkları
   };
 }
 
@@ -142,6 +144,7 @@ export const wallets: Record<Chain, TrackedWallet[]> = {
   bsc: evmList(rawWallets.bsc),
   base: evmList(rawWallets.base),
   blast: evmList(rawWallets.blast),
+  monad: evmList(rawWallets.monad),
 };
 
 // Eski config.yaml'larla uyum: eksik ağ = kapalı
@@ -151,9 +154,14 @@ cfg.filters.unknown_trap_penalty ??= 0;
 cfg.risk.auto_scale ??= false;
 cfg.risk.min_scale ??= 0.25;
 
-const RISK_KEY = { solana: 'sol', bsc: 'bnb', base: 'eth', blast: 'eth' } as const; // Blast = ETH profili, günlük cap ağ başına ayrı sayılır
-export const riskFor = (chain: Chain): ChainRisk => cfg.risk[RISK_KEY[chain]];
-export const nativeSymbol = (chain: Chain) => ({ solana: 'SOL', bsc: 'BNB', base: 'ETH', blast: 'ETH' })[chain];
+const RISK_KEY = { solana: 'sol', bsc: 'bnb', base: 'eth', blast: 'eth', monad: 'mon' } as const; // Blast = ETH profili, günlük cap ağ başına ayrı sayılır
+export const riskFor = (chain: Chain): ChainRisk => {
+  const r = cfg.risk[RISK_KEY[chain]];
+  if (!r) throw new Error(`config.yaml: risk.${RISK_KEY[chain]} yok (${chain} açık)`);
+  return r;
+};
+for (const c of CHAINS) if (cfg.chains[c].enabled) riskFor(c); // eksik risk profili açılışta patlasın
+export const nativeSymbol = (chain: Chain) => ({ solana: 'SOL', bsc: 'BNB', base: 'ETH', blast: 'ETH', monad: 'MON' })[chain];
 export const filtersFor = (chain: Chain): Config['filters'] => ({ ...cfg.filters, ...(cfg.chain_filters?.[chain] ?? {}) });
 export const paperOnly = (chain: Chain) => !isLiveMode() || Boolean(cfg.chains[chain].paper_only);
 function isLiveMode() {

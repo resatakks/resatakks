@@ -28,7 +28,7 @@ const minOut = (amt: bigint, bps: number) => (amt * BigInt(10_000 - bps)) / 10_0
 async function gas(chain: EvmChain): Promise<Record<string, bigint>> {
   if (chain === 'bsc') return { gasPrice: parseUnits(String(cfg.exec.bsc_gas_price_gwei), 'gwei') };
   const fd = await evmProvider(chain).getFeeData();
-  const cap = parseUnits(String(cfg.exec.base_max_fee_gwei ?? 0.5), 'gwei');
+  const cap = parseUnits(String(chain === 'monad' ? (cfg.exec.monad_max_fee_gwei ?? 200) : (cfg.exec.base_max_fee_gwei ?? 0.5)), 'gwei');
   const max = fd.maxFeePerGas && fd.maxFeePerGas < cap ? fd.maxFeePerGas : cap;
   const tip = fd.maxPriorityFeePerGas && fd.maxPriorityFeePerGas < max ? fd.maxPriorityFeePerGas : max / 10n;
   return { maxFeePerGas: max, maxPriorityFeePerGas: tip };
