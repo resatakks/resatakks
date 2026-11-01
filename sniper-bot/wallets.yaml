@@ -1,0 +1,27 @@
+# İzlenen cüzdanlar. type: smart (kârlı on-chain cüzdan) | kol (influencer cüzdanı)
+#
+# Bilerek BOŞ: doğrulanmamış "en iyi 2026 cüzdanları" listesi eklenmedi. Hazır listeler
+# (Telegram/X paylaşımları) çoğu zaman eskimiş, exit-liquidity olarak kullanılan veya
+# copy-trade botlarını tuzağa çeken adreslerdir. Liste boşken smart money filtresi hiçbir
+# adayı geçirmez; paper mod yine tüm adayları kaydeder ve gölge-paper raporu üretir.
+#
+# Doldurma (25 adres hedefi, ~%70 smart / %30 kol):
+#   1) Botu paper modda 3–7 gün çalıştır (candidates.jsonl + outcomes.jsonl birikir).
+#   2) npm run discover-wallets  → data/wallet-candidates-YYYY-MM-DD.md
+#      (kazanan token'larda erken top-holder olup rug'larda görünmeyen adresler;
+#       rug oranı > %35, win rate < %42 ve sniper botlar otomatik elenir)
+#   3) Her adayı elle doğrula (Solscan / BscScan / GMGN cüzdan sayfası):
+#      - son 30 günde ≥ 20 işlem, realize PnL pozitif, win rate ≥ %40
+#      - tek token'a bağlı değil, CEX/aggregator/bot (dakikada onlarca tx) değil
+#      - aynı token'da hep ilk blokta alıp dakikalar içinde satan → sniper bot, ekleme
+#   4) KOL cüzdanı: yalnız KOL'un kendisinin kamuya açıkça ilan ettiği adres.
+#   5) Ekle, Helius webhook'unun account listesini güncelle, redeploy.
+#   6) Her Pazar npm run report → n ≥ 3 ve rug oranı > %35 olanları çıkar.
+#   7) Sabah Raporu'ndaki "tuzağa düşme risk skoru" ≥ 2 rug'da önce satan etiketi gösterirse çıkar.
+solana:
+  # - { address: "WalletPubkeyBase58", label: "sm_01", type: smart }
+  # - { address: "WalletPubkeyBase58", label: "kol_01", type: kol }
+bsc:
+  # - { address: "0xWallet", label: "sm_bsc_01", type: smart }
+
+base: []   # Base (8453) — discover-wallets önerisiyle, basescan'de doğrulayıp ekle
