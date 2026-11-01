@@ -56,6 +56,11 @@ export interface Config {
     wash_min_wallets: number;
     wash_group_max: number;
     max_wash_trade_pct: number;
+    sync_min_wallets?: number; // aynı slot/blokta aynı yönde bu kadar farklı cüzdan = senkron blok
+    sync_repeat_min?: number; // bir cüzdan çifti bu kadar senkron blokta birlikte → koordineli
+    max_sync_trade_pct?: number;
+    max_sync_repeat_wallets?: number; // sync_swarm: trade% ≥ max_sync_trade_pct VE repeat ≥ bu
+    max_sync_rug_link_pct?: number; // senkron grubun ≥ bu %'si başka rug'larda da senkron → ele
     wash_unknown_pass: boolean;
     early_dump_window_min: number;
     max_early_dump_pct: number;
@@ -151,6 +156,11 @@ export const wallets: Record<Chain, TrackedWallet[]> = {
 for (const c of CHAINS) cfg.chains[c] ??= { enabled: false };
 cfg.filters.combo_rules ??= true;
 cfg.filters.unknown_trap_penalty ??= 0;
+cfg.filters.sync_min_wallets ??= 3;
+cfg.filters.sync_repeat_min ??= 3;
+cfg.filters.max_sync_trade_pct ??= 55;
+cfg.filters.max_sync_repeat_wallets ??= 3;
+cfg.filters.max_sync_rug_link_pct ??= 25;
 cfg.risk.auto_scale ??= false;
 cfg.risk.min_scale ??= 0.25;
 

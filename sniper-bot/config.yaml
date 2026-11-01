@@ -53,6 +53,13 @@ filters:
   wash_group_max: 5
   max_wash_trade_pct: 15
   wash_unknown_pass: true       # veri çekilemezse elemez (ama trap skoruna "unknown" cezası yazılır)
+  # senkron cüzdan: aynı slot/blokta aynı yönde ≥3 farklı cüzdan. 1 Kas ölçümü: trend pumpswap havuzunda trade'lerin
+  # %40'ı zaten senkron (doğal kalabalık), tekrarlayan çift 0 → asıl işaret aynı çiftlerin defalarca birlikte görünmesi.
+  sync_min_wallets: 3
+  sync_repeat_min: 3            # bir çift ≥3 senkron blokta birlikte → koordineli
+  max_sync_trade_pct: 55        # sync_swarm: trade% ≥55 VE koordineli cüzdan ≥3 → ele
+  max_sync_repeat_wallets: 3
+  max_sync_rug_link_pct: 25     # senkron grubun ≥%25'i önceki rug'larda da senkron → ele
   # --- tuzak filtreleri (sert) ---
   early_dump_window_min: 8      # launch sonrası ilk N dk
   max_early_dump_pct: 35        # ilk 8 dk zirveden ≥%35 düşüş → ele
@@ -63,7 +70,7 @@ filters:
   max_bundled_pct: 20           # dev'in ödediği / launch slot/bloğundaki erken alım ≥%20 → ele
   max_trap_score: 50            # sinyal tuzak skoru > 50 → otomatik ele
   suspect_wallet_score: 50      # bu skorun üstündeki cüzdan = şüpheli (sinyal + rapor + discover)
-  combo_rules: true             # dev_sniper_hybrid / smart_trap / wash_ring / insider_exit / rug_ring → tek başına eler
+  combo_rules: true             # dev_sniper_hybrid / smart_trap / wash_ring / insider_exit / rug_ring / coordinated_dump → tek başına eler
   unknown_trap_penalty: 0       # eksik veri başına ek ceza (taban 4/alan, tavan 16 zaten uygulanır)
   min_smart_entries: 2
   min_smart_only: 1
@@ -89,8 +96,8 @@ chain_filters:
 risk:
   sol:                          # $50 ≈ 0.31 SOL
     paper_start_balance: 0.31
-    probe_min: 0.03             # ≈ $4.8
-    probe_max: 0.0375           # ≈ $6
+    probe_min: 0.02             # ≈ $3.2
+    probe_max: 0.04             # ≈ $6.4
     probe_balance_pct: 12
     fee_reserve: 0.02           # tx ücreti + ATA rent
     daily_loss_cap: 0.08        # ≈ $12.8 (~%26 bankroll) — operatör tercihi; pratik tavan aşağıda
@@ -125,9 +132,9 @@ risk:
   max_consecutive_losses: 2
   reentry_block_hours: 72       # aynı token'a 72 saat tekrar giriş yok (kapanıştan itibaren)
   # realize kayıp + açık pozisyonlar × % + yeni × % <= daily_loss_cap × risk ölçeği
-  # SOL (cap 0.08): 2 × 0.0375 × 0.4 = 0.03 ≤ 0.08 → iki açık pozisyon. Günlük gerçek tavanı çoğunlukla
-  # max_consecutive_losses (2 kayıp → dur) ve max_trades_per_day (6 × 0.0375 = 0.225 SOL toplam giriş) belirler;
-  # stop -%20 ile tipik kayıp/işlem ≈ 0.0075 SOL. auto_scale bu cap'i rapora göre küçültebilir (asla büyütmez).
+  # SOL (cap 0.08): 2 × 0.04 × 0.4 = 0.032 ≤ 0.08 → iki açık pozisyon. Günlük gerçek tavanı çoğunlukla
+  # max_consecutive_losses (2 kayıp → dur) ve max_trades_per_day (6 × 0.04 = 0.24 SOL toplam giriş) belirler;
+  # stop -%20 ile tipik kayıp/işlem ≈ 0.004–0.008 SOL. auto_scale bu cap'i rapora göre küçültebilir (asla büyütmez).
   assumed_worst_loss_pct: 40
   auto_scale: true              # /rapor (ve sabah raporu) "önerilen günlük max risk" ölçeği cap'i küçültür (asla büyütmez)
   min_scale: 0.25

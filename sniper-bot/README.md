@@ -14,6 +14,9 @@ GeckoTerminal new_pools + DexScreener profiles  (20 sn)
       dev'in önceki token'ı rug olduysa → ele  (dev_serial)
   → wash trading (SOL: Helius son 100 SWAP, BSC: son ~400 blok Transfer)
       ≥ 4 cüzdan 30 sn içinde al-sat yapıyor ve en büyük 5'li grup trade'lerin ≥ %20'si → ele
+  → senkron cüzdan (aynı swap verisi): aynı slot/blokta aynı yönde ≥3 cüzdan; aynı çift ≥3 blokta birlikte = koordineli
+      senkron trade ≥ %55 VE koordineli ≥3 cüzdan → ele (sync_swarm) · grubun ≥%25'i önceki rug'larda da senkron → ele
+      koordineli ≥3 + erken dump/dev satışı/wash → coordinated_dump (kombo, tek başına eler)
   → holder sayımı t0, 120 sn bekle, t1 → büyüme > %0.1  (SOL: Helius DAS, BSC: GoPlus)
   → smart money/KOL
       SOL: Helius Enhanced webhook (SWAP) + RPC bakiye doğrulama
@@ -68,7 +71,8 @@ Gün sınırı `timezone: Europe/Istanbul` — gece seansı (00:00–08:00) tek 
 |---|---|
 | `/rapor` | son 24 sa, tüm bölümler |
 | `/rapor 6` | son 6 sa (1–336 sa) |
-| `/rapor tuzak` | tuzak oranı, kombo sayıları, 14 gün tuzak isabeti (rug %, kaçan +%50, geçen-rug %), şüpheli cüzdanlar |
+| `/rapor tuzak` | tuzak oranı, kombo sayıları, 14 gün tuzak isabeti (rug %, kaçan +%50, geçen-rug %), şüpheli cüzdanlar + senkron analizi |
+| `/rapor senkron` | aynı slot/blokta ≥3 cüzdanın aynı yönde işlemi: ağ başına ort. senkron trade %, koordineli grup, sync_swarm/coordinated_dump elemeleri, 14g rug farkı, tekrarlayan senkron cüzdanlar |
 | `/rapor risk` | önerilen günlük max risk (ölçek × cap, ≈$) ve hangi kuralın küçülttüğü |
 | `/rapor firsat rekabet` | hangi ağda fırsat daha çok / rekabet daha az (son 24 sa, tahmin) |
 | `/rapor launchpad` | köken launchpad/dex kırılımı (pump-fun, meteora-dbc, four-meme …) |

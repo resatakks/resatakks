@@ -18,9 +18,9 @@ const ofChain = (rows: Row[], c: Chain) => rows.filter((r) => rowChain(r) === c)
 
 export const TRAP_REASONS = new Set([
   'trap_score', 'trap_wallet', 'dev_sell', 'dev_serial', 'early_dump', 'rug_cluster', 'bundle', 'sniper_flip', 'sniper_rug_link', 'wash_trading',
-  'dev_sniper_hybrid', 'smart_trap', 'wash_ring', 'insider_exit', 'rug_ring',
+  'dev_sniper_hybrid', 'smart_trap', 'wash_ring', 'insider_exit', 'rug_ring', 'sync_swarm', 'coordinated_dump',
 ]);
-const COMBO = ['dev_sniper_hybrid', 'smart_trap', 'wash_ring', 'insider_exit', 'rug_ring', 'trap_wallet'];
+const COMBO = ['dev_sniper_hybrid', 'smart_trap', 'wash_ring', 'insider_exit', 'rug_ring', 'coordinated_dump', 'trap_wallet'];
 const SECURITY = new Set(['honeypot', 'top10', 'lp_lock', 'renounce', 'sell_tax', 'buy_tax']);
 
 const DEFAULT_USD = { sol: 160, bnb: 600, eth: 3000, mon: 0.019 } as const;
@@ -54,6 +54,40 @@ export function trapDetail(rows: Row[], since: number): string[] {
       );
     } else L.push(`  isabet: veri az (${elim.length} biten elenen aday; ≥5 gerekir)`);
   }
+  return L;
+}
+
+// ---------- Aynı anda birden fazla cüzdan (senkron blok) ----------
+// Aday başına son ~100 swap'ta aynı slot/blokta aynı yönde ≥3 cüzdan; yüksek = koordineli cüzdan ≥ max_sync_repeat_wallets.
+export function syncSection(rows: Row[], since: number): string[] {
+  const L = ['👥 <b>Senkron cüzdan analizi</b> (aynı slot/blokta ≥3 cüzdan aynı yönde)'];
+  for (const c of enabledChains()) {
+    const f = filtersFor(c);
+    const hi = (r: Row) => (r.metrics.syncRepeatWallets ?? 0) >= (f.max_sync_repeat_wallets ?? 3);
+    const win = ofChain(rows, c).filter((r) => Date.parse(r.ts) >= since && r.metrics.syncTradePct != null);
+    if (!win.length) {
+      L.push(`${c}: senkron verisi yok (wash kontrolüne giren aday 0)`);
+      continue;
+    }
+    const avg = win.reduce((s, r) => s + (r.metrics.syncTradePct ?? 0), 0) / win.length;
+    const swarm = win.filter((r) => reasonsOf(r).includes('sync_swarm')).length;
+    const coord = win.filter((r) => reasonsOf(r).includes('coordinated_dump')).length;
+    L.push(`${c}: ${win.length} aday · ort. senkron trade %${avg.toFixed(0)} · koordineli grup ${win.filter(hi).length} · sync_swarm ${swarm} · coordinated_dump ${coord}`);
+    const done = ofChain(rows, c).filter((r) => r.done && r.path.length && r.metrics.syncTradePct != null && Date.parse(r.ts) >= Date.now() - 14 * DAY);
+    const a = done.filter(hi), b = done.filter((r) => !hi(r));
+    if (a.length >= 3 && b.length >= 3)
+      L.push(`  14g: koordineli grupta rug %${pct(a.filter(isRug).length, a.length).toFixed(0)} (${a.length}) vs diğerleri %${pct(b.filter(isRug).length, b.length).toFixed(0)} (${b.length})`);
+    else L.push(`  14g isabet: veri az (koordineli ${a.length} / diğer ${b.length} biten; ikisi de ≥3 gerekir)`);
+  }
+  // En çok token'da senkron görülen cüzdanlar (sync_groups.jsonl) + kaçı rug
+  const rugged = new Set(rows.filter((r) => r.done && isRug(r)).map((r) => r.key));
+  const byW = new Map<string, Set<string>>();
+  for (const g of readJsonl<any>('sync_groups.jsonl')) for (const w of g.wallets ?? []) (byW.get(`${g.chain}:${w}`) ?? byW.set(`${g.chain}:${w}`, new Set()).get(`${g.chain}:${w}`)!).add(`${g.chain}:${g.token}`);
+  const top = [...byW].filter(([, t]) => t.size >= 2).sort((x, y) => y[1].size - x[1].size).slice(0, 8);
+  if (top.length) {
+    L.push('tekrarlayan senkron cüzdanlar (token / rug):');
+    for (const [w, t] of top) L.push(`  · <code>${w}</code> ${t.size} / ${[...t].filter((k) => rugged.has(k)).length}`);
+  } else L.push('tekrarlayan senkron cüzdan yok (≥2 token gerekir)');
   return L;
 }
 

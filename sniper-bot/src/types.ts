@@ -48,6 +48,10 @@ export interface Metrics extends Security {
   trapParts?: Record<string, number>;
   washWallets?: number | null;
   washTradePct?: number | null;
+  syncTradePct?: number | null; // aynı slot/blokta ≥3 cüzdanın aynı yönde işlem yaptığı trade %
+  syncMaxWallets?: number | null; // tek blokta en fazla farklı cüzdan
+  syncRepeatWallets?: number | null; // defalarca birlikte senkron işlem yapan cüzdan sayısı
+  syncRugLinkPct?: number | null; // senkron gruptan, başka rug token'larında da senkron görülenlerin %
   smartWallets: string[];
   kolWallets: string[];
   holders0: number | null;

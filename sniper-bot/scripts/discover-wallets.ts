@@ -96,6 +96,7 @@ const KINDS: [SuspectKind, string][] = [
   ['serial_dev', "Seri rug'cu dev"],
   ['wash_ring', 'Wash trading halkası'],
   ['rug_cluster', "Rug kümesi (aynı grup birden fazla rug'da)"],
+  ['sync_ring', 'Senkron halka (aynı blokta birlikte işlem, ≥2 token)'],
   ['sniper_bot', 'Sniper bot'],
 ];
 const explorer = (chain: string, a: string) =>

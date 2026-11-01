@@ -42,7 +42,7 @@ server.listen(Number(process.env.PORT || 8080));
 void startCommands({
   '/status': async () => statusText(),
   '/rapor': async (args) => {
-    // İstek üzerine detaylı rapor (varsayılan son 24 sa). /rapor tuzak | risk | firsat | rekabet | launchpad | cikis | config | <saat>
+    // İstek üzerine detaylı rapor (varsayılan son 24 sa). /rapor tuzak | senkron | risk | firsat | rekabet | launchpad | cikis | config | <saat>
     // riskSection auto_scale açıksa risk ölçeğini günceller (yalnız küçültür). Telegram 4096 sınırı için parçala.
     const text = morningReport(parseReportArgs(args));
     for (let i = 0; i < text.length - 3900; i += 3900) await tg(text.slice(i, i + 3900));

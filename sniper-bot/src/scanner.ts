@@ -12,7 +12,7 @@ import { sniperPct } from './sources/sniper.js';
 import { washCheck } from './sources/wash.js';
 import { state } from './state.js';
 import { tg } from './telegram.js';
-import { clusterCheck, comboFlags, devLinkedEarlyPct, devPrevRugs, signalTrapScore, suspectEarlyPct, suspects, trapLabels } from './trap.js';
+import { clusterCheck, comboFlags, syncRugLinkPct, devLinkedEarlyPct, devPrevRugs, signalTrapScore, suspectEarlyPct, suspects, trapLabels } from './trap.js';
 import { track } from './tracker.js';
 import type { Metrics, PairInfo } from './types.js';
 import { errMsg, jsonl, log, queue, sleep } from './util.js';
@@ -52,13 +52,17 @@ async function deepCheck(pi: PairInfo) {
   const early = evaluate(base, { ...f, max_sniper_pct: Infinity, sniper_unknown_pass: true, wash_unknown_pass: true, min_smart_entries: 0, min_smart_only: 0, require_holder_growth: false });
   if (early.length) return finish(pi, base, early, 'security');
 
-  // 1b) Wash trading (son ~100 swap / ~400 blok).
+  // 1b) Wash trading + senkron cüzdan (son ~100 swap / ~5 dk blok).
   const wash = await washCheck(pi.chain, pi.token, pi.pair).catch((e) => {
     log.warn('wash calc', { token: pi.token, err: errMsg(e) });
     return null;
   });
   base.washWallets = wash?.washWallets ?? null;
   base.washTradePct = wash?.washTradePct ?? null;
+  base.syncTradePct = wash?.sync.syncTradePct ?? null;
+  base.syncMaxWallets = wash?.sync.syncMaxWallets ?? null;
+  base.syncRepeatWallets = wash?.sync.syncRepeatWallets ?? null;
+  base.syncRugLinkPct = wash ? syncRugLinkPct(pi.chain, pi.token, wash.sync.group) : null;
   const washFail = evaluate(base, { ...f, max_sniper_pct: Infinity, sniper_unknown_pass: true, min_smart_entries: 0, min_smart_only: 0, require_holder_growth: false });
   if (washFail.length) return finish(pi, base, washFail, 'wash');
 

@@ -29,6 +29,11 @@ export function evaluate(m: Metrics, f: Config['filters']): string[] {
   if (m.devPrevRugs != null && m.devPrevRugs > f.max_dev_prev_rugs) fail.push('dev_serial');
   if (m.clusterRugs != null && m.clusterRugs >= f.cluster_min_rugs) fail.push('rug_cluster');
   if (m.sniperBundledPct != null && m.sniperBundledPct >= f.max_bundled_pct) fail.push('bundle');
+  if (
+    (m.syncTradePct != null && m.syncRepeatWallets != null && m.syncTradePct >= (f.max_sync_trade_pct ?? 55) && m.syncRepeatWallets >= (f.max_sync_repeat_wallets ?? 3)) ||
+    (m.syncRugLinkPct != null && m.syncRugLinkPct >= (f.max_sync_rug_link_pct ?? 25))
+  )
+    fail.push('sync_swarm');
   if (m.trapScore != null && m.trapScore > f.max_trap_score) fail.push('trap_score');
   if (m.trapWallets?.length) fail.push('trap_wallet');
   if (f.combo_rules) fail.push(...comboFlags(m));

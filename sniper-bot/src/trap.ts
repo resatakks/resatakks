@@ -24,6 +24,7 @@ interface WalletHist {
   devOf: Set<string>; // dev olduğu token'lar
   devRugs: number;
   washTokens: Set<string>; // wash grubunda göründüğü token'lar
+  syncTokens: Set<string>; // senkron (aynı blok, tekrarlayan) grupta göründüğü token'lar
   rugPartners: Map<string, number>; // aynı rug'da birlikte erken alan cüzdan → kaç rug
 }
 
@@ -52,7 +53,7 @@ export function history(force = false): Hist {
     if (!w)
       ws.set(
         k,
-        (w = { chain, address: a, tokens: new Set(), rugTokens: new Set(), soldInRug: 0, maxBuys: 0, quickFlips: 0, devOf: new Set(), devRugs: 0, washTokens: new Set(), rugPartners: new Map() }),
+        (w = { chain, address: a, tokens: new Set(), rugTokens: new Set(), soldInRug: 0, maxBuys: 0, quickFlips: 0, devOf: new Set(), devRugs: 0, washTokens: new Set(), syncTokens: new Set(), rugPartners: new Map() }),
       );
     return w;
   };
@@ -80,6 +81,7 @@ export function history(force = false): Hist {
     if (rugged.has(t)) w.devRugs++;
   }
   for (const g of readJsonl<any>('wash_groups.jsonl')) for (const a of g.wallets ?? []) get(g.chain, a).washTokens.add(tk(g.chain, g.token));
+  for (const g of readJsonl<any>('sync_groups.jsonl')) for (const a of g.wallets ?? []) get(g.chain, a).syncTokens.add(tk(g.chain, g.token));
 
   // rug kümeleri: aynı rug'da birlikte erken alan çiftler
   for (const t of rugged) {
@@ -94,7 +96,7 @@ export function history(force = false): Hist {
 }
 
 // ---------- cüzdan şüphe skoru (0–100) ----------
-export type SuspectKind = 'rug_accomplice' | 'smart_trap' | 'sniper_bot' | 'dev_sniper' | 'serial_dev' | 'wash_ring' | 'rug_cluster';
+export type SuspectKind = 'rug_accomplice' | 'smart_trap' | 'sniper_bot' | 'dev_sniper' | 'serial_dev' | 'wash_ring' | 'rug_cluster' | 'sync_ring';
 
 export interface Suspect {
   chain: string;
@@ -145,6 +147,12 @@ export function walletSuspicion(w: WalletHist): Suspect {
     s += 10;
     reasons.push('1 token\'da wash grubunda');
   }
+  if (w.syncTokens.size >= 2) {
+    const syncRugs = [...w.syncTokens].filter((t) => history().rugged.has(t)).length;
+    s += 20 + (syncRugs ? 15 : 0);
+    kinds.push('sync_ring');
+    reasons.push(`${w.syncTokens.size} token'da senkron grupta${syncRugs ? ` (${syncRugs} rug)` : ''}`);
+  }
   const partners = [...w.rugPartners.values()].filter((n) => n >= cfg.filters.cluster_min_rugs).length;
   if (partners >= cfg.filters.cluster_min_shared - 1) {
     s += 25;
@@ -183,6 +191,15 @@ export function rugLinkPct(chain: Chain, token: string, ws: string[]): number | 
 }
 
 // Aynı ≥ cluster_min_shared erken alıcı kaç önceki rug'da birlikte erken girdi?
+// Senkron grubun, kendi dışında rug olmuş bir token'da da senkron görülen kısmı (%)
+export function syncRugLinkPct(chain: Chain, token: string, ws: string[]): number | null {
+  const h = history();
+  if (!h.finished || !ws.length) return null;
+  const self = tk(chain, token);
+  const linked = ws.filter((a) => [...(h.wallets.get(`${chain}:${norm(chain, a)}`)?.syncTokens ?? [])].some((t) => t !== self && h.rugged.has(t))).length;
+  return (linked / ws.length) * 100;
+}
+
 export function clusterCheck(chain: Chain, token: string, ws: string[]): { rugs: number; maxShared: number } | null {
   const h = history();
   if (!h.finished || !ws.length) return null;
@@ -250,6 +267,9 @@ export function signalTrapScore(m: Metrics): { score: number; parts: Record<stri
     dev_sniper: 25 * lin(m.devLinkedEarlyPct, 10),
     trap_wallet: m.trapWallets?.length ? 40 : 0,
     wash: 15 * lin(m.washTradePct, 15),
+    // senkron trade% popüler token'da doğal olarak ~%40 (1 Kas ölçümü) → yalnız %40 üstü sayılır
+    sync: 10 * lin((m.syncTradePct ?? 0) - 40, 30) + 20 * lin(m.syncRepeatWallets, 6),
+    sync_rug: 30 * lin(m.syncRugLinkPct, 20),
   };
   // yalnız tam kontrole (sniper analizi) giren sinyalde eksik veri cezası
   if (m.sniperBuyers != null || m.sniperPct != null) {
@@ -272,5 +292,6 @@ export function comboFlags(m: Metrics): string[] {
   if (v(m.washTradePct) >= 10 && v(m.suspectEarlyPct) >= 10) out.push('wash_ring');
   if (v(m.earlyDumpPct) >= 30 && v(m.sniperQuickFlipPct) >= 40) out.push('insider_exit');
   if (v(m.clusterRugs) >= 1 && v(m.sniperRugLinkPct) >= 10) out.push('rug_ring');
+  if (v(m.syncRepeatWallets) >= 3 && (v(m.earlyDumpPct) >= 20 || v(m.devSoldPct) >= 5 || v(m.washTradePct) >= 10)) out.push('coordinated_dump');
   return out;
 }

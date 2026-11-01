@@ -143,6 +143,15 @@ export function runOptimization(all: Row[] = loadRows(), chain?: Chain): OptResu
     const s = objective(score(train, f, curE));
     if (s > bestFs) [bestF, bestFs] = [f, s];
   }
+  // 1c) Senkron cüzdan eşikleri
+  for (const f of grid(bestF, {
+    max_sync_trade_pct: [45, 55, 70],
+    max_sync_repeat_wallets: [2, 3, 5],
+    max_sync_rug_link_pct: [15, 25, 40],
+  })) {
+    const s = objective(score(train, f, curE));
+    if (s > bestFs) [bestF, bestFs] = [f, s];
+  }
 
   // 2) Çıkışlar (en iyi filtreyle)
   let bestE = curE;
