@@ -7,7 +7,7 @@
 // Kullanım: npm run discover-wallets            (en az ~1 hafta candidates + outcomes verisi gerekir)
 import fs from 'node:fs';
 import path from 'node:path';
-import { CHAINS, DATA_DIR, cfg, isEvm, normAddr, wallets, type Chain } from '../src/config.js';
+import { CHAINS, DATA_DIR, cfg, isEvm, normAddr, wallets, type Chain, type EvmChain } from '../src/config.js';
 import { EVM } from '../src/chains.js';
 import { suspects, suspicionOf, type SuspectKind } from '../src/trap.js';
 import { readJsonl, utcDay } from '../src/util.js';
@@ -99,7 +99,7 @@ const KINDS: [SuspectKind, string][] = [
   ['sniper_bot', 'Sniper bot'],
 ];
 const explorer = (chain: string, a: string) =>
-  isEvm(chain as Chain) ? `${EVM[chain as 'bsc' | 'base'].explorer}/address/${a}` : `https://solscan.io/account/${a}`;
+  isEvm(chain as Chain) ? `${EVM[chain as EvmChain].explorer}/address/${a}` : `https://solscan.io/account/${a}`;
 const lines = [
   `# Aday cüzdanlar ${utcDay()} — ${done.size} token, ${outcomes.size} sonuç`,
   `kriter: ≥${MIN_WINS} kazanan (max ≥ +${WIN_MAX_PCT}%), rug oranı ≤ %${MAX_RUG_RATE * 100}, win rate ≥ %${MIN_WIN_RATE * 100}, sniper bot değil, şüphe skoru < ${MAX_SUSPICION}, zaten izlenenler hariç`,

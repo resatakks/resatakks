@@ -10,6 +10,7 @@ export interface PairInfo {
   liquidityUsd: number;
   fdvUsd: number;
   pairCreatedAt: number; // ms
+  launchpad?: string; // ilk görüldüğü GeckoTerminal dex'i (pump-fun, meteora-dbc, four-meme …) — rapor kırılımı
 }
 
 export interface Security {

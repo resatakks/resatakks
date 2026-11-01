@@ -131,6 +131,27 @@ export function opportunitySection(rows: Row[]): string[] {
   return L;
 }
 
+// ---------- Launchpad / dex kırılımı (pump.fun benzeri platformlar dahil, son 24 sa) ----------
+export function launchpadSection(rows: Row[]): string[] {
+  const since = Date.now() - DAY;
+  const by = new Map<string, Row[]>();
+  for (const r of rows) {
+    if (Date.parse(r.ts) < since) continue;
+    const k = `${rowChain(r)}/${r.launchpad ?? '?'}`;
+    (by.get(k) ?? by.set(k, []).get(k)!).push(r);
+  }
+  const L = ['🚀 <b>Launchpad kırılımı</b> (son 24 sa · köken dex → aday / geçen / biten +%50 / rug)'];
+  if (!by.size) return [...L, 'veri yok'];
+  const list = [...by].map(([k, rs]) => {
+    const done = rs.filter((r) => r.done && r.path.length);
+    return { k, n: rs.length, passed: rs.filter((r) => reasonsOf(r).length === 0).length, done: done.length, pump: pct(done.filter(isPump).length, done.length), rug: pct(done.filter(isRug).length, done.length) };
+  });
+  for (const o of list.sort((a, b) => b.n - a.n).slice(0, 10))
+    L.push(`${o.k}: ${o.n} / ${o.passed} / ${o.done ? `%${o.pump.toFixed(0)}` : '-'} / ${o.done ? `%${o.rug.toFixed(0)}` : '-'}`);
+  L.push('bonding curve havuzları (pump-fun, meteora-dbc…) LP olmadığı için mezun olana kadar likidite filtresinde kalır.');
+  return L;
+}
+
 // ---------- Bugün hangi ağda daha az rekabet var (son 24 saat erken alıcı verisi) ----------
 export function competitionSection(): string[] {
   const since = Date.now() - DAY;

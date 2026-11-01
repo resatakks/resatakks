@@ -123,7 +123,7 @@ export const scanStats = { discovered: 0, prefiltered: 0, deepChecked: 0, passed
 
 async function finish(pi: PairInfo, m: Metrics, fails: string[], stage: string) {
   scanStats.deepChecked++;
-  jsonl('candidates.jsonl', { chain: pi.chain, token: pi.token, symbol: pi.symbol, pair: pi.pair, priceUsd: pi.priceUsd, stage, fails, metrics: m });
+  jsonl('candidates.jsonl', { chain: pi.chain, token: pi.token, symbol: pi.symbol, pair: pi.pair, dex: pi.dex, launchpad: pi.launchpad, priceUsd: pi.priceUsd, stage, fails, metrics: m });
   track(pi); // geçen/kalan herkesin sonrası izlenir → haftalık optimizasyon
   if (fails.length) return;
   scanStats.passed++;

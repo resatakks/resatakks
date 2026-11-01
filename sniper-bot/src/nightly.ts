@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CHAINS, DATA_DIR, cfg, nativeSymbol, riskFor, type Chain } from './config.js';
-import { competitionSection, opportunitySection, riskSection, safeExitSection, trapDetail, TRAP_REASONS } from './insights.js';
+import { competitionSection, launchpadSection, opportunitySection, riskSection, safeExitSection, trapDetail, TRAP_REASONS } from './insights.js';
 import { loadRows, rejectCounts, runOptimization, shadowSince, fmtScore, type Row } from './optimizer.js';
 import { scanStats } from './scanner.js';
 import { trapRisk } from './smartmoney.js';
@@ -109,43 +109,64 @@ export function trapAnalysis(rows: Row[], since: number): string[] {
   return L;
 }
 
-export function morningReport(): string {
-  const since = windowStartMs();
+// /rapor alt bölümleri: /rapor tuzak | risk | firsat | rekabet | cikis | config | <saat>
+export const REPORT_PARTS = ['ozet', 'risk', 'firsat', 'rekabet', 'launchpad', 'tuzak', 'cikis', 'config'] as const;
+export type ReportPart = (typeof REPORT_PARTS)[number];
+export interface ReportOpts {
+  sinceMs?: number; // varsayılan: nightly penceresi başlangıcı
+  parts?: ReportPart[]; // varsayılan: hepsi
+  title?: string;
+}
+
+// /rapor [bölüm…] [saat] → ör. "/rapor", "/rapor tuzak", "/rapor risk cikis 6"
+export function parseReportArgs(args: string[]): ReportOpts {
+  const ascii = (a: string) => a.toLocaleLowerCase('tr').replace(/[çışğöü]/g, (ch) => ({ ç: 'c', ı: 'i', ş: 's', ğ: 'g', ö: 'o', ü: 'u' })[ch]!);
+  const parts = args.map(ascii).filter((a): a is ReportPart => (REPORT_PARTS as readonly string[]).includes(a));
+  const h = Number(args.find((a) => /^\d+(\.\d+)?$/.test(a)) ?? 24);
+  return { sinceMs: Date.now() - Math.min(Math.max(h, 1), 24 * 14) * 3_600_000, parts: parts.length ? parts : undefined, title: `📊 <b>Rapor</b> · son ${h} sa` };
+}
+
+export function morningReport(opts: ReportOpts = {}): string {
+  const since = opts.sinceMs ?? windowStartMs();
+  const want = (p: ReportPart) => !opts.parts || opts.parts.includes(p);
   const rows = rowsNow();
   const L: string[] = [];
-  L.push(`☀️ <b>Sabah Raporu</b> · ${utcDay()} · ${cfg.mode.toUpperCase()}`);
-  L.push(`pencere ${cfg.nightly.start}–${localHHMM()} (${cfg.timezone})`);
-  L.push('');
-  L.push(`<b>Tarama</b>: keşif ${scanStats.discovered} · ön-filtre geçen ${scanStats.prefiltered} · derin kontrol ${scanStats.deepChecked}`);
-  L.push(`filtre geçen ${scanStats.passed} · risk kapısına takılan ${scanStats.gated} · açılan ${scanStats.opened}`);
-
-  for (const c of CHAINS.filter((x) => cfg.chains[x].enabled)) {
-    const b = chainBlock(c, rows, since);
+  L.push(`${opts.title ?? '☀️ <b>Sabah Raporu</b>'} · ${utcDay()} · ${cfg.mode.toUpperCase()}`);
+  L.push(`pencere ${new Date(since).toLocaleString('tr-TR', { timeZone: cfg.timezone, hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}–${localHHMM()} (${cfg.timezone}) · fırsat/rekabet/launchpad her zaman son 24 sa`);
+  if (want('ozet')) {
     L.push('');
-    L.push(`<b>${c.toUpperCase()}</b> — aday ${b.sh.candidates}, filtre geçen ${b.sh.passed}`);
-    if (b.sh.rejects.length) L.push(`eleme: ${b.sh.rejects.slice(0, 6).map(([k, v]) => `${k} ${v}`).join(', ')}`);
-    L.push(`gölge paper (geçen her aday, ${riskFor(c).probe_max} ${b.sym} probe): ${fmtScore(b.sh.score)}`);
-    L.push(`gölge PnL ≈ ${b.sh.probePnlNative >= 0 ? '+' : ''}${b.sh.probePnlNative.toFixed(4)} ${b.sym}`);
-    for (const t of b.sh.trades.slice(0, 8)) L.push(`  · ${t.symbol} ${t.pct >= 0 ? '+' : ''}${t.pct.toFixed(1)}%${t.done ? '' : ' (sürüyor)'}`);
-    L.push(`gerçek ${cfg.mode}: ${b.real.length} kapanan işlem, PnL ${b.realPnl >= 0 ? '+' : ''}${b.realPnl.toFixed(4)} ${b.sym}`);
-    for (const t of b.real.slice(0, 8))
-      L.push(`  · ${t.symbol} ${t.exitReason} ${Number(t.pnlPct ?? 0) >= 0 ? '+' : ''}${Number(t.pnlPct ?? 0).toFixed(1)}%`);
-    const day = state.daily.realized[c] ?? 0;
-    L.push(`gün toplamı ${day >= 0 ? '+' : ''}${day.toFixed(4)} / limit −${riskFor(c).daily_loss_cap} / hedef +${riskFor(c).daily_profit_target}`);
+    L.push(`<b>Tarama</b>: keşif ${scanStats.discovered} · ön-filtre geçen ${scanStats.prefiltered} · derin kontrol ${scanStats.deepChecked}`);
+    L.push(`filtre geçen ${scanStats.passed} · risk kapısına takılan ${scanStats.gated} · açılan ${scanStats.opened}`);
+
+    for (const c of CHAINS.filter((x) => cfg.chains[x].enabled)) {
+      const b = chainBlock(c, rows, since);
+      L.push('');
+      L.push(`<b>${c.toUpperCase()}</b> — aday ${b.sh.candidates}, filtre geçen ${b.sh.passed}`);
+      if (b.sh.rejects.length) L.push(`eleme: ${b.sh.rejects.slice(0, 6).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+      L.push(`gölge paper (geçen her aday, ${riskFor(c).probe_max} ${b.sym} probe): ${fmtScore(b.sh.score)}`);
+      L.push(`gölge PnL ≈ ${b.sh.probePnlNative >= 0 ? '+' : ''}${b.sh.probePnlNative.toFixed(4)} ${b.sym}`);
+      for (const t of b.sh.trades.slice(0, 8)) L.push(`  · ${t.symbol} ${t.pct >= 0 ? '+' : ''}${t.pct.toFixed(1)}%${t.done ? '' : ' (sürüyor)'}`);
+      L.push(`gerçek ${cfg.mode}: ${b.real.length} kapanan işlem, PnL ${b.realPnl >= 0 ? '+' : ''}${b.realPnl.toFixed(4)} ${b.sym}`);
+      for (const t of b.real.slice(0, 8))
+        L.push(`  · ${t.symbol} ${t.exitReason} ${Number(t.pnlPct ?? 0) >= 0 ? '+' : ''}${Number(t.pnlPct ?? 0).toFixed(1)}%`);
+      const day = state.daily.realized[c] ?? 0;
+      L.push(`gün toplamı ${day >= 0 ? '+' : ''}${day.toFixed(4)} / limit −${riskFor(c).daily_loss_cap} / hedef +${riskFor(c).daily_profit_target}`);
+    }
+
+    const open = openPositions();
+    L.push('');
+    L.push(`<b>Açık pozisyon</b>: ${open.length ? open.map((p) => `${p.symbol}(${p.chain}) ${((p.lastValueNative / p.sizeNative - 1) * 100).toFixed(1)}%`).join(', ') : 'yok'}`);
+    if (state.haltedDay === utcDay()) L.push(`⛔ günlük durdurma: ${state.haltReason}`);
+    if (state.paused) L.push(`⏸ duraklatılmış: ${state.pauseReason}`);
   }
 
-  const open = openPositions();
-  L.push('');
-  L.push(`<b>Açık pozisyon</b>: ${open.length ? open.map((p) => `${p.symbol}(${p.chain}) ${((p.lastValueNative / p.sizeNative - 1) * 100).toFixed(1)}%`).join(', ') : 'yok'}`);
-  if (state.haltedDay === utcDay()) L.push(`⛔ günlük durdurma: ${state.haltReason}`);
-  if (state.paused) L.push(`⏸ duraklatılmış: ${state.pauseReason}`);
-
-  for (const sec of [riskSection(rows, since), opportunitySection(rows), competitionSection()]) L.push('', ...sec);
-
-  L.push('');
-  L.push(...trapAnalysis(rows, since));
-  L.push('', ...trapDetail(rows, since));
-  L.push('', ...safeExitSection(rows));
+  if (want('risk')) L.push('', ...riskSection(rows, since));
+  if (want('firsat')) L.push('', ...opportunitySection(rows));
+  if (want('rekabet')) L.push('', ...competitionSection());
+  if (want('launchpad')) L.push('', ...launchpadSection(rows));
+  if (want('tuzak')) L.push('', ...trapAnalysis(rows, since), '', ...trapDetail(rows, since));
+  if (want('cikis')) L.push('', ...safeExitSection(rows));
+  if (!want('config')) return L.join('\n');
 
   // Optimizasyon ağ başına: yalnız o ağın kendi kayıtları + filtersFor(chain)
   L.push('');
@@ -172,6 +193,7 @@ async function sendMorning() {
   const text = morningReport();
   fs.writeFileSync(LAST_REPORT_FILE, utcDay());
   fs.writeFileSync(path.join(DATA_DIR, `sabah-raporu-${utcDay()}.txt`), text.replace(/<\/?b>/g, ''));
+  if (cfg.nightly.auto_report === false) return log.info('sabah raporu dosyaya yazıldı (auto_report: false → /rapor ile iste)');
   // Telegram 4096 karakter sınırı
   for (let i = 0; i < text.length; i += 3900) await tg(text.slice(i, i + 3900));
   log.info('sabah raporu gönderildi');

@@ -1,4 +1,4 @@
-# sniper-bot — Solana (Jupiter) + BSC (Pancake V2) + Base (Uniswap V2 / Aerodrome), smart money/KOL hibrit sinyal
+# sniper-bot — Solana (Jupiter + pump.fun benzeri launchpad'ler) + BSC (Pancake V2) + Base (Uniswap V2 / Aerodrome) + Blast (Uniswap V2), smart money/KOL hibrit sinyal
 
 Varsayılan **paper** mod: gerçek quote'larla simülasyon, sanal bakiye. Live için `config.yaml → mode: live` **ve** env `LIVE_CONFIRM=YES`.
 
@@ -54,13 +54,30 @@ $50 ≈ 0.31 SOL ≈ 0.083 BNB ≈ 0.0167 ETH (SOL≈$160, BNB≈$600, ETH≈$30
 | Ardışık kayıp | 2 → gün sonuna kadar dur | | |
 | Günlük işlem | 6 | | |
 
-**Risk ölçeği** (`risk.auto_scale: true`): Sabah Raporu her ağ için 0.25–1 arası bir ölçek hesaplar ve günlük cap'i bununla **küçültür** (asla büyütmez). Bu bir mekanik limittir, yatırım tavsiyesi değildir.
+**Risk ölçeği** (`risk.auto_scale: true`): `/rapor` (ve sabah raporu) her ağ için 0.25–1 arası bir ölçek hesaplar ve günlük cap'i bununla **küçültür** (asla büyütmez). Bu bir mekanik limittir, yatırım tavsiyesi değildir.
 
 Gün sınırı `timezone: Europe/Istanbul` — gece seansı (00:00–08:00) tek güne düşer.
 
 ## Telegram
 
-`/status` · `/rapor` (Sabah Raporu'nu şimdi üret) · `/pause` (yeni giriş yok, açıklar yönetilir) · `/resume` · `/panic` (hepsini sat + dur). Yalnız `TELEGRAM_CHAT_ID`'den gelen komutlar işlenir.
+`/status` · `/rapor` (detaylı rapor, aşağıda) · `/pause` (yeni giriş yok, açıklar yönetilir) · `/resume` · `/panic` (hepsini sat + dur). Yalnız `TELEGRAM_CHAT_ID`'den gelen komutlar işlenir.
+
+### /rapor — istediğin an detaylı rapor
+
+| Komut | İçerik |
+|---|---|
+| `/rapor` | son 24 sa, tüm bölümler |
+| `/rapor 6` | son 6 sa (1–336 sa) |
+| `/rapor tuzak` | tuzak oranı, kombo sayıları, 14 gün tuzak isabeti (rug %, kaçan +%50, geçen-rug %), şüpheli cüzdanlar |
+| `/rapor risk` | önerilen günlük max risk (ölçek × cap, ≈$) ve hangi kuralın küçülttüğü |
+| `/rapor firsat rekabet` | hangi ağda fırsat daha çok / rekabet daha az (son 24 sa, tahmin) |
+| `/rapor launchpad` | köken launchpad/dex kırılımı (pump-fun, meteora-dbc, four-meme …) |
+| `/rapor cikis` | 14 günlük yollardan en güvenli TP/SL/trailing/max hold (p25'i en iyi olan) + gerçek çıkış nedenleri |
+| `/rapor config` | ağ başına önerilen config (UYGULA/UYGULAMA) |
+
+Bölümler birleştirilebilir: `/rapor risk cikis 12`. Türkçe karakterli yazım da olur (`/rapor çıkış`). Rakamlar botun kendi kayıtlarından; "önerilen max risk" mekanik bir limit, yatırım tavsiyesi değil. `auto_scale: true` iken `/rapor` risk ölçeğini günceller (yalnız küçültür).
+
+Otomatik 07:45 raporu `nightly.auto_report: false` ile kapalı (yine `data/sabah-raporu-<gün>.txt`'ye yazılır); `true` yaparsan Telegram'a da gelir.
 
 Bot: @BotFather → `/newbot` → token. Chat ID: bota bir mesaj at, `https://api.telegram.org/bot<TOKEN>/getUpdates` → `chat.id`.
 
@@ -175,7 +192,7 @@ Her 30 dk `data/nightly-summary.log`:
 [03:30] tarandı 412 ön-filtre 37 derin 37 · açık 1 · solana: aday 29 geçen 2 gölge 2tr avg 8.4% · gerçek 1tr +0.0041 SOL | bsc: …
 ```
 
-07:45'te Telegram'a **☀️ Sabah Raporu** (kopyası `data/sabah-raporu-YYYY-MM-DD.txt`):
+07:45'te **☀️ Sabah Raporu** (`auto_report: true` ise Telegram'a; her an `/rapor` aynı içeriği verir) (kopyası `data/sabah-raporu-YYYY-MM-DD.txt`):
 - tarama: keşif / ön-filtre / derin kontrol / filtre geçen / risk kapısına takılan / açılan
 - zincir başına: aday, geçen, en sık eleme nedenleri, gölge paper (n, win, avg, pf, PnL), gerçek paper/live kapanan işlemler ve PnL, günlük cap/hedef durumu
 - açık pozisyonlar, günlük durdurma/duraklatma
@@ -197,7 +214,7 @@ caffeinate -i node --env-file=.env node_modules/.bin/tsx src/nightly-run.ts
 ```
 veya `.env` shell'e yüklüyse `caffeinate -i npm run nightly`. Davranış:
 - gece yarısından önce başlatırsan 00:00'ı bekler, pencereye girer
-- 07:45'te Sabah Raporu → Telegram
+- 07:45: sabah raporu dosyaya (Telegram için `auto_report: true`); istediğin an `/rapor`
 - 08:00'de durumu kaydedip çıkar (rapor kaçtıysa çıkarken atar)
 - gündüz başlatırsan bir sonraki 08:00'e kadar çalışır
 - `caffeinate -i` Mac'in uyumasını engeller; kapak kapanırsa süreç durur
@@ -208,14 +225,14 @@ tail -n 20 data/nightly-summary.log
 cat data/sabah-raporu-$(date +%F).txt
 ```
 
-## Nightly modda çalıştır, sabah rapor at
+## Şimdi nightly modda veya /rapor ile test et
 
 **Railway:**
 ```bash
 railway up
 railway logs | grep -E "nightly başladı|started"
 ```
-`nightly başladı {"window":"00:00-08:00","report":"07:45"}` görünmeli. Telegram'da `/rapor` ile raporu hemen dene. 07:45'te ☀️ Sabah Raporu kendiliğinden gelir (risk / fırsat / rekabet / tuzak / çıkış / config bölümleri yukarıda).
+`nightly başladı {"window":"00:00-08:00","report":"07:45"}` görünmeli. Telegram'da `/status`, sonra `/rapor` yaz — ilk saatlerde bölümler "veri az" der; birkaç saat tarama sonrası `/rapor 6`, sabah `/rapor` tam dolu gelir. Otomatik 07:45 gönderimi için `nightly.auto_report: true`.
 
 **Yerelde (Mac açık kalacak):**
 ```bash
@@ -224,6 +241,13 @@ cp .env.example .env    # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, HELIUS_API_KEY, 
 caffeinate -i node --env-file=.env node_modules/.bin/tsx src/nightly-run.ts
 ```
 08:00'de kendisi çıkar. Sabah: `cat data/sabah-raporu-$(date +%F).txt`.
+
+**Yerelde sürekli (gündüz test, /rapor ile):**
+```bash
+cd sniper-bot
+node --env-file=.env node_modules/.bin/tsx src/index.ts
+```
+Telegram'dan `/rapor 1` (son 1 sa), `/rapor launchpad`, `/rapor tuzak`.
 
 ## Tuzak tespiti (src/trap.ts)
 
@@ -285,7 +309,7 @@ Skor ve bileşenleri her adayın `metrics.trapScore` / `trapParts` alanında; op
 
 ## Paper → live kontrol listesi
 
-- [ ] En az 2 hafta paper, ≥ 40 kapanmış işlem, `npm run report` net pozitif, Sabah Raporu'nda gölge avg > 0
+- [ ] En az 2 hafta paper, ≥ 40 kapanmış işlem, `npm run report` net pozitif, `/rapor`da gölge avg > 0
 - [ ] Bot için **ayrı** cüzdan; içinde yalnız bankroll (~0.2 SOL + ~0.03 BNB)
 - [ ] `mode: live` + `LIVE_CONFIRM=YES` + private key env'leri → redeploy
 - [ ] İlk gün `/status` ile takip; sorun olursa `/panic`
@@ -329,6 +353,9 @@ Skor ve bileşenleri her adayın `metrics.trapScore` / `trapParts` alanında; op
 
 ## Bilinen sınırlar
 
+- **Ağ aktivitesi (1 Kas 2026, GeckoTerminal new_pools ilk sayfa):** Solana ~20 havuz/dk (çoğu pump-fun bonding curve; likiditesi ≥$10k olan 2–4), BSC 20 havuz/14 dk (pancake_v2 16, four-meme 4), Base 20 havuz/21 dk (16'sı Uniswap V4 → atlanır), Blast 0 (kapalı), Monad 20/15 dk ama likidite ≥$10k yok ve V2 router doğrulanmadı (eklenmedi), Ethereum gas $50 probe için fazla (eklenmedi).
+- **Solana launchpad'leri:** pump.fun, letsbonk, meteora DBC, raydium launchlab, boop, moonit, bags vb. token'ları keşfedilir ama bonding curve'deyken LP/likidite olmadığından `min_liquidity_usd`'de kalır; mezun olunca (pumpswap / meteora-damm-v2 / raydium) normal filtrelerden geçer. Bonding curve'e doğrudan alım (pre-migration) yok.
+- **Blast:** Uniswap V2 (router `0xBB66…3035`, factory `0x5C34…1070`, WETH `0x4300…0004` on-chain doğrulandı). honeypot.is Blast'ı desteklemiyor → vergi/honeypot yalnız GoPlus. Varsayılan kapalı.
 - **Base:** yalnız Uniswap **V2** ve Aerodrome **volatile** havuzları. Uniswap V3/V4, Clanker/Flaunch (V4 hook) ve bonding-curve token'ları atlanır (pair 20-byte adres değilse aday alınmaz). Ücret EIP-1559, tavan `exec.base_max_fee_gwei`. GoPlus/honeypot.is chain id 8453.
 
 - **BSC:** yalnız Pancake **V2**. four.meme bonding curve veya yalnız V3 havuzlu token'lar atlanır. GoPlus `holder_count` önbellekli → BSC holder büyümesi kaba.

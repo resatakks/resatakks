@@ -40,7 +40,7 @@ export const BURN_ADDRS = new Set([
   '0x000000000000000000000000000000000000dead',
 ]);
 
-// ---------- EVM ağları (BSC + Base) ----------
+// ---------- EVM ağları (BSC + Base + Blast) ----------
 // Rotalar sırayla denenir; ilk sıfırdan büyük quote veren kullanılır.
 // v2 = Uniswap V2 / Pancake V2 arayüzü, aero = Aerodrome (Route[] yollu, volatile havuz).
 // Uniswap V3/V4 (Clanker, Flaunch vb.) havuzları desteklenmez → canRoute false / scanner atlar.
@@ -92,6 +92,23 @@ export const EVM: Record<EvmChain, EvmNet> = {
     ],
     secPerBlock: 2,
     explorer: 'https://basescan.org',
+  },
+  // Blast (81457): router/factory/WETH 1 Kas 2026'da rpc.blast.io üzerinde eth_call ile doğrulandı.
+  // GoPlus destekliyor, honeypot.is desteklemiyor (vergi yalnız GoPlus'tan). 1 Kas 2026: GeckoTerminal'de yeni havuz yok.
+  blast: {
+    id: 81457,
+    rpcEnv: 'BLAST_RPC_URL',
+    keyEnv: 'BLAST_PRIVATE_KEY',
+    wrapped: '0x4300000000000000000000000000000000000004',
+    quotes: new Set(
+      [
+        '0x4300000000000000000000000000000000000004', // WETH
+        '0x4300000000000000000000000000000000000003', // USDB
+      ].map((a) => a.toLowerCase()),
+    ),
+    routes: [{ name: 'uniswap_v2', kind: 'v2', router: '0xBB66Eb1c5e875933D44DAe661dbD80e5D9B03035', factory: '0x5C346464d33F90bABaf70dB6388507CC889C1070' }],
+    secPerBlock: 2,
+    explorer: 'https://blastscan.io',
   },
 };
 

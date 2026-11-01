@@ -6,7 +6,7 @@ import { evmExecutor, evmQuoteBuy } from './evm.js';
 import { jupQuote, mintDecimals, solanaExecutor } from './solana.js';
 import type { Executor, Fill } from './types.js';
 
-const live: Record<Chain, Executor> = { solana: solanaExecutor, bsc: evmExecutor('bsc'), base: evmExecutor('base') };
+const live: Record<Chain, Executor> = { solana: solanaExecutor, bsc: evmExecutor('bsc'), base: evmExecutor('base'), blast: evmExecutor('blast') };
 const haircut = (x: number) => x * (1 - cfg.exec.paper_extra_slippage_pct / 100);
 const cut = (raw: bigint) => (raw * BigInt(Math.round(haircut(1) * 10_000))) / 10_000n;
 

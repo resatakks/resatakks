@@ -5,7 +5,7 @@ import { startScanner } from './scanner.js';
 import { handleHeliusWebhook, pollEvm, walletCounts } from './smartmoney.js';
 import { save, state } from './state.js';
 import { startCommands, tg } from './telegram.js';
-import { morningReport, startNightly } from './nightly.js';
+import { morningReport, parseReportArgs, startNightly } from './nightly.js';
 import { startTracker } from './tracker.js';
 import { errMsg, log } from './util.js';
 
@@ -41,9 +41,10 @@ server.listen(Number(process.env.PORT || 8080));
 // ---- Telegram komutları ----
 void startCommands({
   '/status': async () => statusText(),
-  '/rapor': async () => {
-    // Sabah Raporu'nu şimdi üret (07:45 gönderimi sayılmaz); Telegram 4096 sınırı için parçala
-    const text = morningReport();
+  '/rapor': async (args) => {
+    // İstek üzerine detaylı rapor (varsayılan son 24 sa). /rapor tuzak | risk | firsat | rekabet | launchpad | cikis | config | <saat>
+    // riskSection auto_scale açıksa risk ölçeğini günceller (yalnız küçültür). Telegram 4096 sınırı için parçala.
+    const text = morningReport(parseReportArgs(args));
     for (let i = 0; i < text.length - 3900; i += 3900) await tg(text.slice(i, i + 3900));
     return text.slice(Math.floor((text.length - 1) / 3900) * 3900);
   },

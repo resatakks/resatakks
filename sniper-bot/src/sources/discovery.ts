@@ -1,18 +1,36 @@
-import { normAddr, type Chain } from '../config.js';
+import { cfg, normAddr, type Chain } from '../config.js';
 import type { PairInfo } from '../types.js';
 import { getJson, throttle } from '../util.js';
 
 const DEXS = 'https://api.dexscreener.com';
 const GECKO = 'https://api.geckoterminal.com/api/v2';
 
-// GeckoTerminal: yeni havuzlar (free ~30 rpm → 2.1 sn aralık).
+// token → ilk görüldüğü launchpad/dex (GeckoTerminal dex id). Bonding curve'den mezun olup
+// pumpswap/meteora'ya geçen token DexScreener'da yeni dex'iyle görünür; köken burada kalır.
+const origin = new Map<string, string>();
+
+// GeckoTerminal: yeni havuzlar (free ~30 rpm → 2.1 sn aralık). Sayfa sayısı scan.gecko_pages.
 export async function geckoNewPools(chain: Chain): Promise<string[]> {
-  await throttle('gecko', 2100);
-  const j = await getJson<any>(`${GECKO}/networks/${chain}/new_pools?page=1`);
-  return (j.data ?? [])
-    .map((p: any) => String(p.relationships?.base_token?.data?.id ?? ''))
-    .map((id: string) => id.slice(id.indexOf('_') + 1))
-    .filter(Boolean);
+  const pages = Math.max(1, cfg.scan.gecko_pages?.[chain] ?? 1);
+  const skip = new Set(cfg.scan.skip_launchpads ?? []);
+  const out: string[] = [];
+  for (let page = 1; page <= pages; page++) {
+    await throttle('gecko', 2100);
+    const j = await getJson<any>(`${GECKO}/networks/${chain}/new_pools?page=${page}`);
+    for (const p of j.data ?? []) {
+      const id = String(p.relationships?.base_token?.data?.id ?? '');
+      const token = id.slice(id.indexOf('_') + 1);
+      const dex = String(p.relationships?.dex?.data?.id ?? '');
+      if (!token) continue;
+      const k = `${chain}:${normAddr(chain, token)}`;
+      if (dex && !origin.has(k)) origin.set(k, dex);
+      if (skip.has(origin.get(k) ?? dex)) continue;
+      out.push(token);
+    }
+    if ((j.data ?? []).length < 20) break;
+  }
+  if (origin.size > 50_000) origin.clear();
+  return out;
 }
 
 // DexScreener: profil açan yeni token'lar (genelde dev/ekip aktif olanlar).
@@ -46,6 +64,7 @@ export async function bestPairs(chain: Chain, tokens: string[]): Promise<Map<str
         liquidityUsd: liq,
         fdvUsd: Number(p.fdv ?? 0),
         pairCreatedAt: Number(p.pairCreatedAt ?? 0),
+        launchpad: origin.get(`${chain}:${key}`) ?? p.dexId,
       });
     }
   }

@@ -2,7 +2,7 @@
 # Tüm tutarlar o ağın native birimi. Dolar karşılıkları yaklaşık fiyatla (SOL≈$160, BNB≈$600, ETH≈$3000) —
 # fiyat değişince probe/cap'leri aynı dolar seviyesine göre güncelle.
 # $50 ile öneri: YALNIZ BİR ağı live yap (bankroll bölünürse probe'lar ücrete göre çok küçülür);
-# diğerleri paper_only: true kalsın, Sabah Raporu'ndaki fırsat/rekabet tablosu hangisinin daha iyi gittiğini gösterir.
+# diğerleri paper_only: true kalsın, /rapor'daki fırsat/rekabet tablosu hangisinin daha iyi gittiğini gösterir.
 mode: paper
 timezone: Europe/Istanbul   # gün sınırı (günlük limitler 00:00'da sıfırlanır) + nightly saatleri
 
@@ -10,6 +10,8 @@ chains:
   solana: { enabled: true }                    # Jupiter
   bsc: { enabled: true, paper_only: true }     # Pancake V2
   base: { enabled: true, paper_only: true }    # Uniswap V2 → Aerodrome (volatile); V3/V4/Clanker havuzları atlanır
+                                               # 1 Kas 2026 ölçüm: Base yeni havuzlarının ~%80'i Uniswap V4 → çoğu atlanır
+  blast: { enabled: false, paper_only: true }  # Uniswap V2 (router on-chain doğrulandı); 1 Kas 2026: yeni havuz 0 → kapalı
 
 scan:
   interval_sec: 20
@@ -17,6 +19,13 @@ scan:
   max_pair_age_min: 90
   deep_check_concurrency: 2
   seen_ttl_min: 180
+  # GeckoTerminal new_pools sayfası (20 havuz/sayfa, 2.1 sn). Solana ~20 havuz/dk → 3 sayfa ≈ son 3 dk.
+  gecko_pages: { solana: 3, bsc: 1, base: 1, blast: 1 }
+  # pump.fun benzeri launchpad'ler (pump-fun, letsbonk-fun, meteora-dbc, raydium-launchlab, boop-fun, moonit,
+  # bags-fm, heaven …) zaten taranır: bonding curve'deyken LP/likidite yok → filtrede kalır, mezun olunca
+  # (pumpswap / meteora-damm-v2 / raydium) normal filtrelerden geçer. Kökeni rapordaki launchpad kırılımında.
+  # Tamamen dışarıda bırakmak istediğin köken dex'leri:
+  skip_launchpads: []
 
 filters:
   min_liquidity_usd: 10000
@@ -105,7 +114,7 @@ risk:
   # realize kayıp + açık pozisyonlar × % + yeni × % <= daily_loss_cap × risk ölçeği
   # SOL: 2 × 0.0375 × 0.4 = 0.03 ≤ 0.03 → iki açık pozisyon; bir kayıp realize olunca yeni giriş kesilir.
   assumed_worst_loss_pct: 40
-  auto_scale: true              # Sabah Raporu'nun "önerilen günlük max risk" ölçeği cap'i küçültür (asla büyütmez)
+  auto_scale: true              # /rapor (ve sabah raporu) "önerilen günlük max risk" ölçeği cap'i küçültür (asla büyütmez)
   min_scale: 0.25
 
 exit:
@@ -131,10 +140,11 @@ tracking:
   track_for_min: 360
 
 nightly:
-  enabled: true          # always-on (Railway) süreçte her gece çalışır
+  enabled: true          # gece özet logu + risk ölçeği; rapor her an /rapor ile
   start: "00:00"
   end: "08:00"
   summary_every_min: 30  # /data/nightly-summary.log
   summary_to_telegram: false
-  report_at: "07:45"     # "Sabah Raporu" Telegram
+  report_at: "07:45"     # sabah raporu data/sabah-raporu-<gün>.txt
+  auto_report: false     # true → 07:45'te Telegram'a da at. false → yalnız /rapor ile iste
   usd_ref: { sol: 160, bnb: 600, eth: 3000 }   # rapordaki ≈$ karşılıkları (fiyat değişince güncelle)

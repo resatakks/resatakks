@@ -53,16 +53,18 @@ export async function solanaHolderCount(mint: string): Promise<number | null> {
   return count; // tavan: büyüme ölçümü 5000 üstünde düzleşir
 }
 
-// ---------- EVM (BSC 56 / Base 8453): GoPlus + honeypot.is ----------
+// ---------- EVM (BSC 56 / Base 8453 / Blast 81457): GoPlus + honeypot.is ----------
 export async function evmSecurity(chain: EvmChain, token: string, pair: string): Promise<Security> {
   const id = EVM[chain].id;
   const addr = token.toLowerCase();
   await throttle('goplus', 1100);
   const [g, hp] = await Promise.all([
     getJson<any>(`https://api.gopluslabs.io/api/v1/token_security/${id}?contract_addresses=${addr}`, {}, 15_000),
-    getJson<any>(`https://api.honeypot.is/v2/IsHoneypot?address=${addr}&chainID=${id}&pair=${pair}`, {}, 15_000).catch(
-      () => null,
-    ),
+    chain === 'blast'
+      ? null // honeypot.is Blast'ı desteklemiyor
+      : getJson<any>(`https://api.honeypot.is/v2/IsHoneypot?address=${addr}&chainID=${id}&pair=${pair}`, {}, 15_000).catch(
+          () => null,
+        ),
   ]);
   const t = g.result?.[addr];
   if (!t) throw new Error('goplus: veri yok');

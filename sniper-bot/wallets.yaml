@@ -25,3 +25,4 @@ bsc:
   # - { address: "0xWallet", label: "sm_bsc_01", type: smart }
 
 base: []   # Base (8453) — discover-wallets önerisiyle, basescan'de doğrulayıp ekle
+blast: []  # Blast (81457) — blastscan'de doğrulayıp ekle

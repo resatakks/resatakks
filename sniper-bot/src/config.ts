@@ -2,10 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
 
-export type Chain = 'solana' | 'bsc' | 'base';
-export const CHAINS: Chain[] = ['solana', 'bsc', 'base'];
+export type Chain = 'solana' | 'bsc' | 'base' | 'blast';
+export const CHAINS: Chain[] = ['solana', 'bsc', 'base', 'blast'];
 export type EvmChain = Exclude<Chain, 'solana'>;
-export const isEvm = (c: string): c is EvmChain => c === 'bsc' || c === 'base';
+export const isEvm = (c: string): c is EvmChain => c === 'bsc' || c === 'base' || c === 'blast';
 // EVM adresleri küçük harfe normalize edilir (Solana base58 büyük/küçük harf duyarlı).
 export const normAddr = (chain: string, a: string) => (isEvm(chain) ? a.toLowerCase() : a);
 
@@ -30,6 +30,10 @@ export interface Config {
     max_pair_age_min: number;
     deep_check_concurrency: number;
     seen_ttl_min: number;
+    // GeckoTerminal new_pools sayfa sayısı (sayfa = 20 havuz, 2.1 sn). Solana'da 20 havuz ~1 dk'da dolar.
+    gecko_pages?: Partial<Record<Chain, number>>;
+    // Bu launchpad/dex kaynaklı token'lar taranmaz (GeckoTerminal dex id, ör. pump-fun, meteora-dbc).
+    skip_launchpads?: string[];
   };
   filters: {
     min_liquidity_usd: number;
@@ -112,6 +116,7 @@ export interface Config {
     summary_every_min: number;
     summary_to_telegram: boolean;
     report_at: string;
+    auto_report?: boolean; // false → report_at'te Telegram'a atmaz (yalnız data/ dosyası), rapor /rapor ile istenir
     usd_ref?: Partial<Record<'sol' | 'bnb' | 'eth', number>>; // rapordaki ≈$ karşılıkları
   };
 }
@@ -136,6 +141,7 @@ export const wallets: Record<Chain, TrackedWallet[]> = {
   solana: rawWallets.solana ?? [],
   bsc: evmList(rawWallets.bsc),
   base: evmList(rawWallets.base),
+  blast: evmList(rawWallets.blast),
 };
 
 // Eski config.yaml'larla uyum: eksik ağ = kapalı
@@ -145,9 +151,9 @@ cfg.filters.unknown_trap_penalty ??= 0;
 cfg.risk.auto_scale ??= false;
 cfg.risk.min_scale ??= 0.25;
 
-const RISK_KEY = { solana: 'sol', bsc: 'bnb', base: 'eth' } as const;
+const RISK_KEY = { solana: 'sol', bsc: 'bnb', base: 'eth', blast: 'eth' } as const; // Blast = ETH profili, günlük cap ağ başına ayrı sayılır
 export const riskFor = (chain: Chain): ChainRisk => cfg.risk[RISK_KEY[chain]];
-export const nativeSymbol = (chain: Chain) => ({ solana: 'SOL', bsc: 'BNB', base: 'ETH' })[chain];
+export const nativeSymbol = (chain: Chain) => ({ solana: 'SOL', bsc: 'BNB', base: 'ETH', blast: 'ETH' })[chain];
 export const filtersFor = (chain: Chain): Config['filters'] => ({ ...cfg.filters, ...(cfg.chain_filters?.[chain] ?? {}) });
 export const paperOnly = (chain: Chain) => !isLiveMode() || Boolean(cfg.chains[chain].paper_only);
 function isLiveMode() {

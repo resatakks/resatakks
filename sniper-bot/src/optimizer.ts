@@ -20,6 +20,7 @@ export interface Row {
   metrics: Metrics;
   path: Path;
   done: boolean; // izleme süresi doldu mu
+  launchpad?: string;
 }
 
 const MIN_N_TRAIN = 20;
@@ -41,7 +42,7 @@ export function loadRows(inProgress: { chain: string; token: string; path: Path 
     const p = paths.get(key);
     // trap skoru güncel ağırlıklarla yeniden hesaplanır → eski kayıtlar da yeni kurallarla değerlendirilir
     const metrics = c.metrics?.trapScore != null ? { ...c.metrics, trapScore: signalTrapScore(c.metrics).score } : c.metrics;
-    rows.push({ ts: c.ts, key, symbol: c.symbol, stage: c.stage, fails: c.fails ?? [], metrics, path: p?.path ?? [], done: p?.done ?? false });
+    rows.push({ ts: c.ts, key, symbol: c.symbol, stage: c.stage, fails: c.fails ?? [], metrics, path: p?.path ?? [], done: p?.done ?? false, launchpad: c.launchpad ?? c.dex });
   }
   return rows;
 }
