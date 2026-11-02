@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "merry-inbox-test", "runtimeExecutable": "/private/tmp/claude-501/-Users-resat-Desktop-resatakks/ad0a480c-4842-446e-9a30-55348cfaaf64/scratchpad/sim-dev.sh", "runtimeArgs": [], "port": 3456 }
+  ]
+}
